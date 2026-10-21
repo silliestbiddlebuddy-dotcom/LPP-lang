@@ -3,6 +3,7 @@ import type {
 	AssignmentStatement,
 	ASTType,
 	BinaryOperator,
+	Block,
 	Declaration,
 	DeclarationUnion,
 	Expression,
@@ -14,7 +15,7 @@ import type {
 	Type as TypeNode,
 	VariableDeclaration,
 } from "../../Parser/Parser.types.ts";
-import { Binder } from "../Binder/Binder.ts";
+import { Binder, type BlockLikeScope } from "../Binder/Binder.ts";
 import type { ScopeTable } from "../Binder/Scope.ts";
 import type { Symbol } from "../Binder/Symbol.ts";
 import {
@@ -24,6 +25,7 @@ import {
 	numericTypes,
 	PrefixUnaryOperatorTable,
 	type Class,
+	type Function,
 	type Interface,
 	type Intersection,
 	type Literal,
@@ -44,9 +46,11 @@ import {
 	createTypedAssertionExpression,
 	createTypedAssignmentStatement,
 	createTypedBinaryExpression,
+	createTypedBlock,
 	createTypedBooleanLiteral,
 	createTypedConstructorExpression,
 	createTypedFunctionCallExpression,
+	createTypedFunctionDeclaration,
 	createTypedFunctionType,
 	createTypedGenericParameter,
 	createTypedIdentifier,
@@ -65,8 +69,10 @@ import {
 	createTypedVariableDeclaration,
 	type TypedArgument,
 	type TypedASTType,
+	type TypedBlock,
 	type TypedExpression,
 	type TypedExpressionOf,
+	type TypedFunctionDeclaration,
 	type TypedGenericParameter,
 	type TypedNode,
 	type TypedObject,
@@ -113,7 +119,7 @@ export class TypeChecker {
 			case "AssignmentStatement":
 				return this.checkAssignmentStatement(node);
 			case "FunctionDeclaration":
-
+				return this.checkFunctionDeclaration(node);
 			case "IfStatement":
 			case "ElseifStatement":
 			case "UserDefinedTypeDeclaration":
@@ -161,19 +167,63 @@ export class TypeChecker {
 
 		return resolvedAssignmentStatement;
 	}
+	private checkFunctionDeclaration(node: FunctionDeclaration): TypedFunctionDeclaration {
+		const parameters: TypedParameter[] = [];
+		for (let index = 0; index < node.parameters.length; index++) {
+			const element = node.parameters[index]!;
+			parameters.push(
+				createTypedParameter(
+					element,
+					createTypedIdentifier(element.name, { kind: "any" }),
+					this.createTypedTypeNode(element.parameterType, this.resolveType(element.parameterType, this.currentEnvironment))
+				)
+			);
+		}
+		const genericParameters: TypedGenericParameter[] = [];
+		for (let index = 0; index < node.genericParameters.length; index++) {
+			const element = node.genericParameters[index]!;
+			genericParameters.push(createTypedGenericParameter(element, this.createTypedTypeNode(element.value, this.resolveType(element.value, this.currentEnvironment))));
+		}
+		const body: TypedBlock = this.typeCheckBlock(node.body);
+		return createTypedFunctionDeclaration(
+			node,
+			createTypedIdentifier(node.name, { kind: "any" }),
+			parameters,
+			this.createTypedTypeNode(node.returnType, this.resolveType(node.returnType, this.currentEnvironment)),
+			body,
+			genericParameters,
+			this.resolveType(node, this.currentEnvironment)
+		);
+	}
 
 	// ===================================================
 	//  Utilities
 	// ===================================================
-	private getScope(node: Node): ScopeTable {
+	private getScope(node: BlockLikeScope): ScopeTable {
 		if (!this.binder.scopes.has(node)) throw new Error("Node `" + node.type + "` does not have a scope.");
 		return this.binder.scopes.get(node)!;
 	}
-	private getEnvironment(node: Node): TypeEnvironment {
+	private getEnvironment(node: BlockLikeScope): TypeEnvironment {
 		if (!this.binder.environments.has(node)) throw new Error("Node `" + node.type + "` does not have an environment.");
 		return this.binder.environments.get(node)!;
 	}
 
+	private typeCheckBlock(block: Block): TypedBlock {
+		const oldEnv = this.currentEnvironment;
+		const oldScope = this.currentScope;
+		this.currentEnvironment = this.getEnvironment(block);
+		this.currentScope = this.getScope(block);
+
+		const body: TypedNode[] = [];
+
+		for (let index = 0; index < block.body.length; index++) {
+			const node = block.body[index]!;
+			body.push(this.checkStatement(node as Statement));
+		}
+		this.currentEnvironment = oldEnv;
+		this.currentScope = oldScope;
+		return createTypedBlock(block, body);
+	}
 	private getSymbolFromNode(node: DeclarationUnion | Statement | Expression): Symbol | null {
 		switch (node.type) {
 			case "VariableDeclaration": {
@@ -476,7 +526,7 @@ export class TypeChecker {
 	//  Resolving
 	// ===================================================
 
-	public resolveType(node: TypeNode, environment: TypeEnvironment): Type {
+	public resolveType(node: TypeNode | FunctionDeclaration, environment: TypeEnvironment): Type {
 		switch (node.type) {
 			case "NumberLiteral":
 				return { kind: "numberLiteral", value: node.value };
@@ -554,6 +604,33 @@ export class TypeChecker {
 					});
 				}
 				return object;
+			}
+			case "FunctionDeclaration": {
+				const parameters: Parameter[] = [];
+				for (let index = 0; index < node.parameters.length; index++) {
+					const element = node.parameters[index]!;
+					parameters.push({
+						kind: "parameter",
+						name: element.name.value,
+						type: this.resolveType(element.parameterType, environment),
+					});
+				}
+				const typeParameters: TypeParameter[] = [];
+				for (let index = 0; index < node.genericParameters.length; index++) {
+					const element = node.genericParameters[index]!;
+					typeParameters.push({
+						kind: "typeParameter",
+						name: element.identifier,
+						constraint: this.resolveType(element.value, environment),
+					});
+				}
+				const functionType: Function = {
+					kind: "function",
+					returnType: this.resolveType(node.returnType, environment),
+					parameters: parameters,
+					typeParameters: typeParameters,
+				};
+				return functionType;
 			}
 		}
 	}
