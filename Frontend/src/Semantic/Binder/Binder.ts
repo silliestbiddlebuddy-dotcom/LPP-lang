@@ -10,8 +10,11 @@ import type {
 	VariableDeclaration,
 	Property as PropertyNode,
 	GenericParameter,
+	ClassDeclaration,
+	InterfaceDeclaration,
+	UserDefinedTypeDeclaration,
 } from "../../Parser/Parser.types.ts";
-import type { Method, Object, Property } from "../Environment/Builtins.ts";
+import type { Method, Object, Property, UserDefinedType } from "../Environment/Builtins.ts";
 import { TypeEnvironment } from "../Environment/TypeEnvironment.ts";
 import { TypeChecker } from "../TypeChecker/TypeChecker.ts";
 import { ScopeTable } from "./Scope.ts";
@@ -26,8 +29,8 @@ export class Binder {
 
 	private typeChecker: TypeChecker;
 
-	public readonly scopes: Map<Node, ScopeTable>;
-	public readonly environments: Map<Node, TypeEnvironment>;
+	public readonly scopes: Map<Block | ClassDeclaration | InterfaceDeclaration | UserDefinedTypeDeclaration, ScopeTable>;
+	public readonly environments: Map<Block | ClassDeclaration | InterfaceDeclaration | UserDefinedTypeDeclaration, TypeEnvironment>;
 	public readonly AST: ASTType;
 
 	constructor(AST: ASTType) {
@@ -39,8 +42,8 @@ export class Binder {
 
 		this.typeChecker = new TypeChecker(AST, this.currentEnvironment, this.currentScope, this);
 
-		this.scopes = new Map<Node, ScopeTable>();
-		this.environments = new Map<Node, TypeEnvironment>();
+		this.scopes = new Map<Block | ClassDeclaration | InterfaceDeclaration | UserDefinedTypeDeclaration, ScopeTable>();
+		this.environments = new Map<Block | ClassDeclaration | InterfaceDeclaration | UserDefinedTypeDeclaration, TypeEnvironment>();
 
 		this.AST = AST;
 	}
@@ -72,12 +75,12 @@ export class Binder {
 				});
 
 				const functionEnvironment = new TypeEnvironment({ parent: this.currentEnvironment });
-				this.environments.set(node, functionEnvironment);
+				this.environments.set(node.body, functionEnvironment);
 				const oldEnv = this.currentEnvironment;
 				this.currentEnvironment = functionEnvironment;
 
 				const functionScope = new ScopeTable({ parent: this.currentScope });
-				this.scopes.set(node, functionScope);
+				this.scopes.set(node.body, functionScope);
 				this.bindGenerics(node.genericParameters, functionEnvironment);
 				this.bindParameters(node.parameters, functionScope);
 				this.bindBlock(node.body, functionScope);
@@ -220,14 +223,14 @@ export class Binder {
 			const oldEnv = this.currentEnvironment;
 			const methodEnvironment = new TypeEnvironment({ parent: this.currentEnvironment });
 			this.currentEnvironment = methodEnvironment;
-			this.environments.set(method, methodEnvironment);
+			this.environments.set(method.body, methodEnvironment);
 			scope.declareSymbol(method.name.value, {
 				kind: "Method",
 				name: method.name.value,
 				declaration: method,
 			});
 			const methodScope = new ScopeTable({ parent: scope });
-			this.scopes.set(method, methodScope);
+			this.scopes.set(method.body, methodScope);
 			this.bindGenerics(method.genericParameters, methodEnvironment);
 			this.bindParameters(method.parameters, methodScope);
 			this.bindBlock(method.body, methodScope);
