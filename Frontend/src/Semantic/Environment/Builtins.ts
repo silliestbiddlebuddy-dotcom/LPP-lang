@@ -175,7 +175,7 @@ export interface Int {
 	readonly kind: "int";
 }
 
-//unsigned  integers
+//Unsigned integers
 export interface uint8 {
 	readonly kind: "uint8";
 }
