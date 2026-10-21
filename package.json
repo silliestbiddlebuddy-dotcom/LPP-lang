@@ -1,0 +1,19 @@
+{
+  "dependencies": {
+    "@types/node": "^22.20.3",
+    "@types/typescript": "^0.4.29",
+    "commander": "^15.0.0",
+    "typescript": "^7.0.2"
+  },
+  "type": "module",
+  "name": "lpp",
+  "bin": {
+    "lpp": "./CLI/CLI.ts"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2"
+  },
+  "scripts": {
+    "lncount": "find . -type f   -not -path \"./node_modules/*\"   -not -path \"./.git/*\"   \\( -name \"*.ts\"  \\)   -print0 | xargs -0 wc -l"
+  }
+}
