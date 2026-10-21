@@ -19,7 +19,7 @@ import { TypeEnvironment } from "../Environment/TypeEnvironment.ts";
 import { TypeChecker } from "../TypeChecker/TypeChecker.ts";
 import { ScopeTable } from "./Scope.ts";
 import type { ClassSymbol } from "./Symbol.ts";
-
+export type BlockLikeScope = Block | ClassDeclaration | InterfaceDeclaration | UserDefinedTypeDeclaration;
 export class Binder {
 	private globalScope: ScopeTable;
 	private currentScope: ScopeTable;
@@ -29,8 +29,8 @@ export class Binder {
 
 	private typeChecker: TypeChecker;
 
-	public readonly scopes: Map<Block | ClassDeclaration | InterfaceDeclaration | UserDefinedTypeDeclaration, ScopeTable>;
-	public readonly environments: Map<Block | ClassDeclaration | InterfaceDeclaration | UserDefinedTypeDeclaration, TypeEnvironment>;
+	public readonly scopes: Map<BlockLikeScope, ScopeTable>;
+	public readonly environments: Map<BlockLikeScope, TypeEnvironment>;
 	public readonly AST: ASTType;
 
 	constructor(AST: ASTType) {
@@ -42,8 +42,8 @@ export class Binder {
 
 		this.typeChecker = new TypeChecker(AST, this.currentEnvironment, this.currentScope, this);
 
-		this.scopes = new Map<Block | ClassDeclaration | InterfaceDeclaration | UserDefinedTypeDeclaration, ScopeTable>();
-		this.environments = new Map<Block | ClassDeclaration | InterfaceDeclaration | UserDefinedTypeDeclaration, TypeEnvironment>();
+		this.scopes = new Map<BlockLikeScope, ScopeTable>();
+		this.environments = new Map<BlockLikeScope, TypeEnvironment>();
 
 		this.AST = AST;
 	}
