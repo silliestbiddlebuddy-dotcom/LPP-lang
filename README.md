@@ -1,7 +1,9 @@
 # L++ - Made to be enjoyed
 ## 1. Introduction
-**L++ is a simple systems programming language that is strongly and statically typed**<br>
+**L++ is a high-level simple systems programming language that is strongly and statically typed**<br>
 It follows a single philosophy: "*Programming should be enjoyable, easy, and simple*".
+L++ can be transcompiled to luau, however its main target will be LLVM for optimized machine code.
+Apart from being a systems programming language, L++ can also be used for website backends or even frontends by compiling it into WASM
 ## 2. Installation
 To install L++ you need to install [Node.js](https://nodejs.org/en) to run L++, and [git](https://git-scm.com/install/) to clone the repo.<br>
 First we'll clone the repo and tell it to put it inside a folder named lpp:<br>
