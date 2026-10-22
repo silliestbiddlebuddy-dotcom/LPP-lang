@@ -1,0 +1,14 @@
+type Greeting = "hello" | "hey" | "welcome";
+
+type Player = {
+    readonly name: string,
+    score: int
+};
+
+const local player: Player = {
+    name: "Ada",
+    score: 100
+};
+
+print(player.name);
+print(player.score);

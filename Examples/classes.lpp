@@ -1,0 +1,17 @@
+class Counter {
+    public value: int
+
+    public function Counter(initialValue: int) {
+        this.value = initialValue;
+    }
+
+    public function increment(): int {
+        this.value = this.value + 1;
+        return this.value;
+    }
+};
+
+const local counter: Counter = new Counter(0);
+
+print(counter.increment());
+print(counter.increment());

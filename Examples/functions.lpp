@@ -1,0 +1,7 @@
+function add(a: int, b: int): int {
+    const local result: int = a + b;
+    return result;
+}
+
+const local sum: int = add(20, 22);
+print(sum);

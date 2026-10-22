@@ -1,0 +1,10 @@
+type Identity<T: any> = T;
+
+function identity<T: any>(value: T): T {
+    return value;
+}
+
+const local message: Identity<string> =
+    identity<string>("L++");
+
+print(message);

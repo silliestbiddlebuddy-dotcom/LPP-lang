@@ -1,0 +1,8 @@
+const local greeting: string = "Hello from L++";
+const local answer: int = 42;
+
+local score: int = 0;
+score = answer;
+
+print(greeting);
+print(score);
