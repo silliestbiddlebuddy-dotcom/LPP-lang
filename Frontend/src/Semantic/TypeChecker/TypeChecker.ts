@@ -780,13 +780,13 @@ export class TypeChecker {
 		checking.delete(old);
 		return unwrapped;
 	}
-	private lookupMemberOnInterface(_interface: Interface, memberName: string) {
+	private lookupMemberOnInterface(_interface: Interface, memberName: string): Property | undefined {
 		let member = _interface.object.members.get(memberName);
 		if (!member) {
 			for (let index = 0; index < _interface.extends.length; index++) {
 				const element = _interface.extends[index]!;
-				let member = this.lookupMemberOnInterface(element, memberName);
-				break;
+				member = this.lookupMemberOnInterface(element, memberName);
+				if (member) break;
 			}
 		}
 		return member;
