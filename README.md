@@ -34,7 +34,7 @@ Program showcasing generics (type parameters)
 Program showcasing classes
 
 ### 4. Features
-L++ features quite a lot of feature (pun intended) such as:
+L++ features quite a lot of features (pun intended) such as:
 While loops, for loops, constant variables, global scope variables, functions, classes, interfaces, types, and if statements!
 ## 5. Syntax 101 
 L++ syntax comes mostly from Luau, however it adds the things it's missing, native classes, interfaces and a better type system - that's what L++ made possible
