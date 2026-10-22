@@ -7,4 +7,4 @@ function identity<T: any>(value: T): T {
 const local message: Identity<string> =
     identity<string>("L++");
 
-print(message);
+println(message);

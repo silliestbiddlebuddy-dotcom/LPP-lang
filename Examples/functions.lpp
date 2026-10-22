@@ -4,4 +4,4 @@ function add(a: int, b: int): int {
 }
 
 const local sum: int = add(20, 22);
-print(sum);
+println(sum);

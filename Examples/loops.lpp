@@ -1,10 +1,10 @@
 for (local i: int = 0; i < 5; i = i + 1) do {
-    print(i);
+    println(i);
 };
 
 local count: int = 3;
 
 while (count > 0) do {
-    print(count);
+    println(count);
     count = count - 1;
 };

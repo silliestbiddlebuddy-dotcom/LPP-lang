@@ -1,9 +1,9 @@
 const local score: int = 87;
 
 if (score >= 90) do {
-    print("Grade A");
+    println("Grade A");
 } elseif (score >= 70) do {
-    print("Grade B");
+    println("Grade B");
 } else {
-    print("Keep practising!");
+    println("Keep practising!");
 };

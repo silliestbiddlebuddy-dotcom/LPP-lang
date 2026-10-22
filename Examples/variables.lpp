@@ -4,5 +4,5 @@ const local answer: int = 42;
 local score: int = 0;
 score = answer;
 
-print(greeting);
-print(score);
+println(greeting);
+println(score);

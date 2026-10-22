@@ -13,5 +13,5 @@ class Counter {
 
 const local counter: Counter = new Counter(0);
 
-print(counter.increment());
-print(counter.increment());
+println(counter.increment());
+println(counter.increment());
