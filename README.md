@@ -38,7 +38,7 @@ L++ syntax comes mostly from Luau, however it adds the things it's missing, nati
 and just a little bit from C++
 also, all statements require a statement terminator (;) except for block based statements like functions or loops in which statement terminators are optional (they're still required inside the body)
 ### Comments
-L++ currently supports only single-line comments, they are written like in C-style languages.
+L++ currently supports only single-line comments L++ comments are C-style comments.<br>
 ```// HelloWorld(print)```
 ### Declaring variables
 In L++ to declare variables we use this form:<br>`<Modifier> <Scope> <Name> = <Value>;`.<br>
