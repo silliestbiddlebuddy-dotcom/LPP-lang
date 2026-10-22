@@ -585,7 +585,22 @@ export class TypeChecker {
 				return { kind: "function", returnType: this.resolveType(node.returnType, environment), parameters: parameters, typeParameters: typeParameters };
 			}
 			case "ArrayLiteralExpression": {
-				return { kind: "array", elementType: node.elements[0] ? this.resolveExpression(node.elements[0]) : { kind: "never" } };
+				let elementType: Type | Union = {
+					kind: "emptiness",
+				};
+				if (node.elements.length === 0) return elementType;
+				if (node.elements.length === 1) return this.resolveExpression(node.elements[0]!);
+				elementType = {
+					kind: "union",
+					types: [],
+				};
+				for (let index = 0; index < node.elements.length; index++) {
+					const element = node.elements[index]!;
+					const resolvedElementType = this.resolveExpression(element);
+					if (elementType.types.includes(resolvedElementType)) continue;
+					elementType.types.push(resolvedElementType);
+				}
+				return elementType;
 			}
 			case "ObjectExpression": {
 				const object: Object = {
