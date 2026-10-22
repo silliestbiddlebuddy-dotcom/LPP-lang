@@ -659,6 +659,9 @@ export class TypeChecker {
 				for (let index = 0; index < node.arguments.length; index++) {
 					const argument = node.arguments[index]!;
 					const parameter = functionType.parameters[index]!;
+					const resolvedArgument = this.resolveExpression(argument.value);
+					if (!this.isAssignableTo(resolvedArgument, parameter.type, this.currentEnvironment))
+						throw new LPPTypeError("Argument of type `" + resolvedArgument.kind + "` is not assignable to parameter of type `" + parameter.type + "`.");
 				}
 				return functionType.returnType;
 			}
@@ -691,7 +694,7 @@ export class TypeChecker {
 					kind: "emptiness",
 				};
 				if (node.elements.length === 0) return elementType;
-				if (node.elements.length === 1) return this.resolveExpression(node.elements[1]!);
+				if (node.elements.length === 1) return this.resolveExpression(node.elements[0]!);
 				elementType = {
 					kind: "union",
 					types: [],
@@ -730,8 +733,7 @@ export class TypeChecker {
 				const resolvedTarget = this.resolveType(node.target, this.currentEnvironment);
 				const resolvedValue = this.resolveExpression(node.value);
 				if (this.isAssignableTo(resolvedValue, resolvedTarget, this.currentEnvironment)) return resolvedTarget;
-				new LPPTypeError("Cannot assert value  `" + resolvedValue.kind + "` to the type `" + resolvedTarget.kind + "`. They don't seem to have anything in common");
-				return resolvedTarget;
+				throw new LPPTypeError("Cannot assert value  `" + resolvedValue.kind + "` to the type `" + resolvedTarget.kind + "`. They don't seem to have anything in common");
 			}
 			case "PostfixUnaryExpression":
 			default:
