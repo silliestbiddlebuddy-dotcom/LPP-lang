@@ -10,5 +10,5 @@ const local player: Player = {
     score: 100
 };
 
-print(player.name);
-print(player.score);
+println(player.name);
+println(player.score);
