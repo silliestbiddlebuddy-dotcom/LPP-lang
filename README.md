@@ -33,7 +33,10 @@ Program showcasing generics (type parameters)
 ### [Classes Showcase](https://github.com/silliestbiddlebuddy-dotcom/LPP-lang/blob/main/Examples/generics.lpp)
 Program showcasing classes
 
-## 4. Syntax 101 
+### 4. Features
+L++ features quite a lot of feature (pun intended) such as:
+While loops, for loops, constant variables, global scope variables, functions, classes, interfaces, types, and if statements!
+## 5. Syntax 101 
 L++ syntax comes mostly from Luau, however it adds the things it's missing, native classes, interfaces and a better type system - that's what L++ made possible
 and just a little bit from C++
 also, all statements require a statement terminator (;) except for block based statements like functions or loops in which statement terminators are optional (they're still required inside the body)
