@@ -3,7 +3,7 @@
 **L++ is a simple systems programming language that is strongly and statically typed**<br>
 It follows a single philosophy: "*Programming should be enjoyable, easy, and simple*".
 ## 2. Installation
-To install L++ you need to install [Node.js](https://nodejs.org/en) to run L++, and [git](https://git-scm.com/install/) to clone the repo
+To install L++ you need to install [Node.js](https://nodejs.org/en) to run L++, and [git](https://git-scm.com/install/) to clone the repo.<br>
 First we'll clone the repo and tell it to put it inside a folder named lpp:<br>
 ```
 git clone https://github.com/silliestbiddlebuddy-dotcom/LPP-lang.git lpp
