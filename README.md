@@ -105,7 +105,7 @@ type fooUDT = {
 ### Types
 L++ has a lot of types such as: Literal types (```type greeting = "hi";```), Union types (```type greeting = "hi" | "hello";```),  Object types (```type greetingA = {coolGreeting: "hi"};```), Intersection types (```type greeting = greetingA & greetingB;```), and Type references (```type greeting = int;```).
 ### Modifiers
-Before we go into classes we have to talk about modifiers, there are two type of modifiers:
+Before we go into classes we have to talk about modifiers, there are two types of modifiers:
 #### General Modifiers
 Modifiers such as ```export``` or ```declare``` are general modifiers, they can be put before a declaration as such:<br>
 ```export local foo: barType = bar;```<br>
@@ -138,7 +138,12 @@ class foo<T: any> {
     }
 };
 ```
-
+## 6. Q&A 
+Q: Will the license ever change? 
+A: Yes, it will be open source once finished
+Q: Do you exist?
+A: I think so
 
 ## 7. [License](https://github.com/silliestbiddlebuddy-dotcom/LPP-lang/blob/main/LICENSE)
 
+   
