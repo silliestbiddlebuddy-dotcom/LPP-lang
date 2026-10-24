@@ -7,6 +7,7 @@ import type {
 	Declaration,
 	DeclarationUnion,
 	Expression,
+	ForStatement,
 	FunctionDeclaration,
 	Identifier,
 	Node,
@@ -49,6 +50,7 @@ import {
 	createTypedBlock,
 	createTypedBooleanLiteral,
 	createTypedConstructorExpression,
+	createTypedForStatement,
 	createTypedFunctionCallExpression,
 	createTypedFunctionDeclaration,
 	createTypedFunctionType,
@@ -68,10 +70,12 @@ import {
 	createTypedUnionType,
 	createTypedVariableDeclaration,
 	type TypedArgument,
+	type TypedAssignmentStatement,
 	type TypedASTType,
 	type TypedBlock,
 	type TypedExpression,
 	type TypedExpressionOf,
+	type TypedForStatement,
 	type TypedFunctionDeclaration,
 	type TypedGenericParameter,
 	type TypedNode,
@@ -79,6 +83,7 @@ import {
 	type TypedParameter,
 	type TypedProperty,
 	type TypedTypeNode,
+	type TypedVariableDeclaration,
 } from "./TypedAST.ts";
 
 export class TypeChecker {
@@ -120,6 +125,9 @@ export class TypeChecker {
 				return this.checkAssignmentStatement(node);
 			case "FunctionDeclaration":
 				return this.checkFunctionDeclaration(node);
+			case "ForStatement":
+
+			case "WhileStatement":
 			case "IfStatement":
 			case "ElseifStatement":
 			case "UserDefinedTypeDeclaration":
@@ -127,14 +135,12 @@ export class TypeChecker {
 			case "ReturnStatement":
 			case "BreakStatement":
 			case "ContinueStatement":
-			case "ForStatement":
-			case "WhileStatement":
 
 			case "InterfaceDeclaration":
 		}
 	}
 
-	private checkVariableDeclaration(node: VariableDeclaration): TypedNode {
+	private checkVariableDeclaration(node: VariableDeclaration): TypedVariableDeclaration {
 		const resolvedInitializer = this.resolveExpression(node.initializer);
 		const resolvedVariableType = this.resolveType(node.variableType, this.currentEnvironment);
 		if (!this.isAssignableTo(resolvedInitializer, resolvedVariableType, this.currentEnvironment))
@@ -148,7 +154,7 @@ export class TypeChecker {
 
 		return resolvedVariableDeclaration;
 	}
-	private checkAssignmentStatement(node: AssignmentStatement): TypedNode {
+	private checkAssignmentStatement(node: AssignmentStatement): TypedAssignmentStatement {
 		const resolvedTarget = this.resolveExpression(node.target);
 		const resolvedValue = this.resolveExpression(node.value);
 		if (isLiteral(resolvedTarget)) throw new LPPTypeError("Cannot assign a value to a literal value");
@@ -160,8 +166,8 @@ export class TypeChecker {
 			throw new LPPTypeError("Type `" + resolvedValue.kind + "` is not assignable to type `" + resolvedTarget.kind + "`.");
 		const resolvedAssignmentStatement = createTypedAssignmentStatement(
 			node,
-			this.createTypedExpression(node.target, this.resolveExpression(node.target)),
-			this.createTypedExpression(node.value, this.resolveExpression(node.value)),
+			this.createTypedExpression(node.target, resolvedTarget),
+			this.createTypedExpression(node.value, resolvedValue),
 			resolvedValue
 		);
 
@@ -213,7 +219,7 @@ export class TypeChecker {
 		const oldScope = this.currentScope;
 		this.currentEnvironment = this.getEnvironment(block);
 		this.currentScope = this.getScope(block);
-
+		const resolvedType: Type | Union = { kind: "any" };
 		const body: TypedNode[] = [];
 
 		for (let index = 0; index < block.body.length; index++) {
@@ -222,7 +228,7 @@ export class TypeChecker {
 		}
 		this.currentEnvironment = oldEnv;
 		this.currentScope = oldScope;
-		return createTypedBlock(block, body);
+		return createTypedBlock(block, body, resolvedType);
 	}
 	private getSymbolFromNode(node: DeclarationUnion | Statement | Expression): Symbol | null {
 		switch (node.type) {
@@ -600,7 +606,10 @@ export class TypeChecker {
 					if (elementType.types.includes(resolvedElementType)) continue;
 					elementType.types.push(resolvedElementType);
 				}
-				return elementType;
+				return {
+					kind: "array",
+					elementType: elementType,
+				};
 			}
 			case "ObjectExpression": {
 				const object: Object = {
@@ -720,7 +729,10 @@ export class TypeChecker {
 					if (elementType.types.includes(resolvedElementType)) continue;
 					elementType.types.push(resolvedElementType);
 				}
-				return elementType;
+				return {
+					kind: "array",
+					elementType: elementType,
+				};
 			}
 			case "IndexExpression": {
 				const resolvedIndex = this.resolveExpression(node.index);
