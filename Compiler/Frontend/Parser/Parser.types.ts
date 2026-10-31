@@ -38,6 +38,7 @@ export type HierarchyType = {
 
 export type Type = UnionType | IntersectionType | StringLiteral | BooleanLiteral | NumberLiteral | FunctionType | ArrayLiteralExpression | TypeReference | ObjectExpression;
 export type DeclarationUnion = VariableDeclaration | InterfaceDeclaration | ClassDeclaration | FunctionDeclaration | UserDefinedTypeDeclaration | TypeAliasDeclaration;
+export type BlockStatement = WhileStatement | ForStatement | FunctionDeclaration | IfStatement | ElseifStatement;
 export type variableScope = "local" | "global";
 export type BinaryOperator = "+" | "-" | "*" | "/" | "**" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "||" | "&&" | "%";
 export type PrefixUnaryOperator = "!" | "-" | "++" | "--";
@@ -207,6 +208,17 @@ export interface ContinueStatement extends Node {
 }
 export interface BreakStatement extends Node {
 	readonly type: "BreakStatement";
+}
+
+export interface ImportSourceStatement extends Node {
+	readonly type: "ImportSourceStatement";
+	source: string;
+	imports: Identifier[];
+}
+export interface ImportStdlibStatement extends Node {
+	readonly type: "ImportStdlibStatement";
+	stdlib: string;
+	imports: Identifier[];
 }
 
 export interface MemberAccessExpression extends Node {

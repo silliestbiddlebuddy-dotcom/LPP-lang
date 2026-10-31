@@ -1,3 +1,4 @@
+import { llvmSymbolTable } from "../../../Declarations.ts";
 import type {
 	ASTType,
 	Block,
@@ -13,21 +14,20 @@ import type {
 	ClassDeclaration,
 	InterfaceDeclaration,
 	UserDefinedTypeDeclaration,
+	FunctionCallExpression,
 } from "../../Parser/Parser.types.ts";
-import type { Method, Object, Property, UserDefinedType } from "../Environment/Builtins.ts";
+import { BuiltinTypes, type Method, type Object, type Property, type UserDefinedType } from "../Environment/Builtins.ts";
 import { TypeEnvironment } from "../Environment/TypeEnvironment.ts";
 import { TypeChecker } from "../TypeChecker/TypeChecker.ts";
 import { ScopeTable } from "./Scope.ts";
 import type { ClassSymbol } from "./Symbol.ts";
 export type BlockLikeScope = Block | ClassDeclaration | InterfaceDeclaration | UserDefinedTypeDeclaration;
 export class Binder {
-	private globalScope: ScopeTable;
-	private currentScope: ScopeTable;
+	public globalScope: ScopeTable;
+	public currentScope: ScopeTable;
 
-	private globalEnvironment: TypeEnvironment;
-	private currentEnvironment: TypeEnvironment;
-
-	private typeChecker: TypeChecker;
+	public globalEnvironment: TypeEnvironment;
+	public currentEnvironment: TypeEnvironment;
 
 	public readonly scopes: Map<BlockLikeScope, ScopeTable>;
 	public readonly environments: Map<BlockLikeScope, TypeEnvironment>;
@@ -35,12 +35,18 @@ export class Binder {
 
 	constructor(AST: ASTType) {
 		this.globalScope = new ScopeTable({});
+
+		for (const value of Object.values(llvmSymbolTable)) {
+			this.globalScope.declareSymbol(value.symbol.name, value.symbol);
+		}
+
 		this.currentScope = this.globalScope;
 
-		this.globalEnvironment = new TypeEnvironment({});
-		this.currentEnvironment = this.globalEnvironment;
+		this.globalEnvironment = new TypeEnvironment({
+			builtin: BuiltinTypes,
+		});
 
-		this.typeChecker = new TypeChecker(AST, this.currentEnvironment, this.currentScope, this);
+		this.currentEnvironment = this.globalEnvironment;
 
 		this.scopes = new Map<BlockLikeScope, ScopeTable>();
 		this.environments = new Map<BlockLikeScope, TypeEnvironment>();
@@ -50,13 +56,12 @@ export class Binder {
 	public bind() {
 		const program: Program = this.AST[0];
 		for (let index = 0; index < program.body.length; index++) {
-			const statement = program.body[index]! as Statement;
+			const statement = program.body[index]! as Statement | FunctionCallExpression;
 			this.bindStatement(statement);
 		}
-
-		this.typeChecker.typeCheck();
 	}
-	private bindStatement(node: Statement) {
+
+	private bindStatement(node: Statement | FunctionCallExpression) {
 		switch (node.type) {
 			case "VariableDeclaration": {
 				this.currentScope.declareSymbol(node.name, {
@@ -64,6 +69,7 @@ export class Binder {
 					name: node.name,
 					declaration: node,
 					constant: node.constant,
+					scope: this.currentScope,
 				});
 				break;
 			}
@@ -72,6 +78,7 @@ export class Binder {
 					kind: "Function",
 					name: node.name.value,
 					declaration: node,
+					scope: this.currentScope,
 				});
 
 				const functionEnvironment = new TypeEnvironment({ parent: this.currentEnvironment });
@@ -92,6 +99,8 @@ export class Binder {
 					kind: "Class",
 					name: node.identifier,
 					declaration: node,
+					scope: this.currentScope,
+					environment: this.currentEnvironment,
 				};
 				this.currentScope.declareSymbol(node.identifier, classSymbol);
 
@@ -126,6 +135,7 @@ export class Binder {
 					name: node.initializer.name,
 					declaration: node.initializer,
 					constant: node.initializer.constant,
+					scope: this.currentScope,
 				});
 				this.bindBlock(node.body, forScope);
 				break;
@@ -146,6 +156,7 @@ export class Binder {
 					kind: "UserDefinedType",
 					name: node.identifier,
 					declaration: node,
+					environment: this.currentEnvironment,
 				});
 
 				this.currentEnvironment = oldEnv;
@@ -163,6 +174,7 @@ export class Binder {
 					kind: "Interface",
 					name: node.identifier,
 					declaration: node,
+					environment: this.currentEnvironment,
 				});
 
 				this.currentEnvironment = oldEnv;
@@ -173,6 +185,7 @@ export class Binder {
 					kind: "TypeAlias",
 					name: node.alias,
 					declaration: node,
+					environment: this.currentEnvironment,
 				});
 				break;
 			}
@@ -181,6 +194,7 @@ export class Binder {
 			case "AssignmentStatement":
 			case "BreakStatement":
 			case "ContinueStatement":
+			case "FunctionCallExpression":
 			default:
 				break;
 		}
@@ -206,6 +220,7 @@ export class Binder {
 				kind: "Parameter",
 				name: parameter.name.value,
 				declaration: parameter,
+				scope: this.currentScope,
 			});
 		}
 	}
@@ -216,6 +231,7 @@ export class Binder {
 				kind: "Property",
 				name: property.identifier,
 				declaration: property,
+				scope: this.currentScope,
 			});
 		}
 		for (let index = 0; index < members.methods.length; index++) {
@@ -228,6 +244,7 @@ export class Binder {
 				kind: "Method",
 				name: method.name.value,
 				declaration: method,
+				scope: this.currentScope,
 			});
 			const methodScope = new ScopeTable({ parent: scope });
 			this.scopes.set(method.body, methodScope);
@@ -244,6 +261,7 @@ export class Binder {
 				kind: "GenericParameter",
 				name: generic.identifier,
 				declaration: generic,
+				scope: this.currentScope,
 			});
 		}
 	}

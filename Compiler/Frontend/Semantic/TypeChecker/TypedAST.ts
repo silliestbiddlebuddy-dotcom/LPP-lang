@@ -1,7 +1,7 @@
 import type * as AST from "../../Parser/Parser.types.ts";
 import type { Type as SemanticType } from "../Environment/Builtins.ts";
 
-//generated code dont touch
+// generated code — don't touch
 
 // ============================================================
 // Base types
@@ -14,6 +14,8 @@ export interface TypedObject {
 type TypedBase<T> = Omit<T, "resolvedType"> & TypedObject;
 
 type TypedChildren<T, K extends keyof T, R> = Omit<T, K | "resolvedType"> & R & TypedObject;
+
+type TypedStatementBase<T, K extends keyof T = never> = Omit<T, K | "resolvedType">;
 
 // ============================================================
 // Expressions
@@ -158,7 +160,7 @@ export type TypedTypeNode =
 // Supporting nodes
 // ============================================================
 
-export type TypedBlock = Omit<AST.Block, "body"> & {
+export type TypedBlock = Omit<AST.Block, "body" | "resolvedType"> & {
 	body: TypedNode[];
 };
 
@@ -257,62 +259,44 @@ export type TypedDeclaration =
 	| TypedInterfaceDeclaration;
 
 // ============================================================
-// Statements
+// Statements — no resolvedType
 // ============================================================
 
-export type TypedIfStatement = TypedChildren<
-	AST.IfStatement,
-	"condition" | "body" | "elseIfs" | "else",
-	{
-		condition: TypedExpression;
-		body: TypedBlock;
-		elseIfs: TypedElseifStatement[];
-		else?: TypedBlock | null;
-	}
->;
+export type TypedIfStatement = TypedStatementBase<AST.IfStatement, "condition" | "body" | "elseIfs" | "else"> & {
+	condition: TypedExpression;
+	body: TypedBlock;
+	elseIfs: TypedElseifStatement[];
+	else?: TypedBlock | null;
+};
 
-export type TypedElseifStatement = TypedChildren<
-	AST.ElseifStatement,
-	"condition" | "body",
-	{
-		condition: TypedExpression;
-		body: TypedBlock;
-	}
->;
+export type TypedElseifStatement = TypedStatementBase<AST.ElseifStatement, "condition" | "body"> & {
+	condition: TypedExpression;
+	body: TypedBlock;
+};
 
-export type TypedReturnStatement = TypedChildren<AST.ReturnStatement, "expression", { expression: TypedExpression }>;
+export type TypedReturnStatement = TypedStatementBase<AST.ReturnStatement, "expression"> & {
+	expression: TypedExpression;
+};
 
-export type TypedBreakStatement = TypedBase<AST.BreakStatement>;
-export type TypedContinueStatement = TypedBase<AST.ContinueStatement>;
+export type TypedBreakStatement = TypedStatementBase<AST.BreakStatement>;
+export type TypedContinueStatement = TypedStatementBase<AST.ContinueStatement>;
 
-export type TypedForStatement = TypedChildren<
-	AST.ForStatement,
-	"initializer" | "condition" | "update" | "body",
-	{
-		initializer: TypedVariableDeclaration;
-		condition: TypedExpression;
-		update: TypedAssignmentStatement;
-		body: TypedBlock;
-	}
->;
+export type TypedForStatement = TypedStatementBase<AST.ForStatement, "initializer" | "condition" | "update" | "body"> & {
+	initializer: TypedVariableDeclaration;
+	condition: TypedExpression;
+	update: TypedAssignmentStatement;
+	body: TypedBlock;
+};
 
-export type TypedWhileStatement = TypedChildren<
-	AST.WhileStatement,
-	"condition" | "body",
-	{
-		condition: TypedExpression;
-		body: TypedBlock;
-	}
->;
+export type TypedWhileStatement = TypedStatementBase<AST.WhileStatement, "condition" | "body"> & {
+	condition: TypedExpression;
+	body: TypedBlock;
+};
 
-export type TypedAssignmentStatement = TypedChildren<
-	AST.AssignmentStatement,
-	"target" | "value",
-	{
-		target: TypedExpression;
-		value: TypedExpression;
-	}
->;
+export type TypedAssignmentStatement = TypedStatementBase<AST.AssignmentStatement, "target" | "value"> & {
+	target: TypedExpression;
+	value: TypedExpression;
+};
 
 export type TypedStatement =
 	| TypedIfStatement
@@ -322,7 +306,8 @@ export type TypedStatement =
 	| TypedContinueStatement
 	| TypedForStatement
 	| TypedWhileStatement
-	| TypedAssignmentStatement;
+	| TypedAssignmentStatement
+	| TypedDeclaration;
 
 // ============================================================
 // Complete typed AST
@@ -341,6 +326,7 @@ export type TypedASTType = [TypedProgram];
 // ============================================================
 // Expression factories
 // ============================================================
+
 export type TypedExpressionOf<T extends AST.Expression> = T extends AST.NumberLiteral
 	? TypedNumberLiteral
 	: T extends AST.BooleanLiteral
@@ -370,6 +356,7 @@ export type TypedExpressionOf<T extends AST.Expression> = T extends AST.NumberLi
 	: T extends AST.ConstructorExpression
 	? TypedConstructorExpression
 	: never;
+
 export function createTypedNumberLiteral(node: AST.NumberLiteral, resolvedType: SemanticType): TypedNumberLiteral {
 	return { ...node, resolvedType };
 }
@@ -601,7 +588,7 @@ export function createTypedInterfaceDeclaration(
 }
 
 // ============================================================
-// Statement factories
+// Statement factories — no resolvedType
 // ============================================================
 
 export function createTypedIfStatement(
@@ -609,8 +596,7 @@ export function createTypedIfStatement(
 	condition: TypedExpression,
 	body: TypedBlock,
 	elseIfs: TypedElseifStatement[],
-	elseBlock: TypedBlock | null,
-	resolvedType: SemanticType
+	elseBlock: TypedBlock | null
 ): TypedIfStatement {
 	return {
 		...node,
@@ -618,24 +604,23 @@ export function createTypedIfStatement(
 		body,
 		elseIfs,
 		else: elseBlock,
-		resolvedType,
 	};
 }
 
-export function createTypedElseifStatement(node: AST.ElseifStatement, condition: TypedExpression, body: TypedBlock, resolvedType: SemanticType): TypedElseifStatement {
-	return { ...node, condition, body, resolvedType };
+export function createTypedElseifStatement(node: AST.ElseifStatement, condition: TypedExpression, body: TypedBlock): TypedElseifStatement {
+	return { ...node, condition, body };
 }
 
-export function createTypedReturnStatement(node: AST.ReturnStatement, expression: TypedExpression, resolvedType: SemanticType): TypedReturnStatement {
-	return { ...node, expression, resolvedType };
+export function createTypedReturnStatement(node: AST.ReturnStatement, expression: TypedExpression): TypedReturnStatement {
+	return { ...node, expression };
 }
 
-export function createTypedBreakStatement(node: AST.BreakStatement, resolvedType: SemanticType): TypedBreakStatement {
-	return { ...node, resolvedType };
+export function createTypedBreakStatement(node: AST.BreakStatement): TypedBreakStatement {
+	return { ...node };
 }
 
-export function createTypedContinueStatement(node: AST.ContinueStatement, resolvedType: SemanticType): TypedContinueStatement {
-	return { ...node, resolvedType };
+export function createTypedContinueStatement(node: AST.ContinueStatement): TypedContinueStatement {
+	return { ...node };
 }
 
 export function createTypedForStatement(
@@ -643,8 +628,7 @@ export function createTypedForStatement(
 	initializer: TypedVariableDeclaration,
 	condition: TypedExpression,
 	update: TypedAssignmentStatement,
-	body: TypedBlock,
-	resolvedType: SemanticType
+	body: TypedBlock
 ): TypedForStatement {
 	return {
 		...node,
@@ -652,21 +636,15 @@ export function createTypedForStatement(
 		condition,
 		update,
 		body,
-		resolvedType,
 	};
 }
 
-export function createTypedWhileStatement(node: AST.WhileStatement, condition: TypedExpression, body: TypedBlock, resolvedType: SemanticType): TypedWhileStatement {
-	return { ...node, condition, body, resolvedType };
+export function createTypedWhileStatement(node: AST.WhileStatement, condition: TypedExpression, body: TypedBlock): TypedWhileStatement {
+	return { ...node, condition, body };
 }
 
-export function createTypedAssignmentStatement(
-	node: AST.AssignmentStatement,
-	target: TypedExpression,
-	value: TypedExpression,
-	resolvedType: SemanticType
-): TypedAssignmentStatement {
-	return { ...node, target, value, resolvedType };
+export function createTypedAssignmentStatement(node: AST.AssignmentStatement, target: TypedExpression, value: TypedExpression): TypedAssignmentStatement {
+	return { ...node, target, value };
 }
 
 // ============================================================

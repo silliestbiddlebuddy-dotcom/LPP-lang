@@ -2,13 +2,15 @@
   "dependencies": {
     "@types/node": "^22.20.3",
     "@types/typescript": "^0.4.29",
+    "chalk": "^6.0.1",
     "commander": "^15.0.0",
+    "jsonc-parser": "^3.3.1",
     "typescript": "^7.0.2"
   },
   "type": "module",
   "name": "lpp",
   "bin": {
-    "lpp": "./CLI/CLI.ts"
+    "lpp": "./Compiler/CLI.ts"
   },
   "devDependencies": {
     "ts-node": "^10.9.2"

@@ -41,6 +41,8 @@ import {
 	type HierarchyType,
 	type InterfaceDeclaration,
 	type ConstructorExpression,
+	type ImportSourceStatement,
+	type ImportStdlibStatement,
 } from "./Parser.types.ts";
 
 import {
@@ -84,7 +86,16 @@ import {
 	createConstructorExpression,
 } from "../Factory/ASTFactory.ts";
 
-import { isClassKeyword, isConstKeyword, isExtendsKeyword, isGlobalKeyword, isImplementsKeyword, isInterfaceKeyword, isLocalKeyword } from "../Lexer/TokenGuards.ts";
+import {
+	isClassKeyword,
+	isConstKeyword,
+	isExtendsKeyword,
+	isGlobalKeyword,
+	isImplementsKeyword,
+	isImportKeyword,
+	isInterfaceKeyword,
+	isLocalKeyword,
+} from "../Lexer/TokenGuards.ts";
 import {
 	isAccessModifier,
 	isAssignmentOperator,
@@ -158,6 +169,7 @@ export class Parser {
 				return val;
 			}
 			if (this.peek().value === ";") this.expect("Symbol", ";", "Expected statement terminator `;`");
+			if (expression.type !== "FunctionCallExpression") throw new LPPSyntaxError("Expression statements aren't allowed, onlly function calls are.");
 			return expression;
 		} else if (isForKeyword(currentToken)) {
 			const val = this.parseForStatement();
@@ -171,6 +183,10 @@ export class Parser {
 			const val = this.parseBreakStatement();
 			this.expect("Symbol", ";", "Expected statement terminator `;`");
 			return val;
+		} else if (isImportKeyword(currentToken)) {
+			const importStatement = this.parseImportStatement();
+			this.expect("Symbol", ";", "Expected statement terminator `;`");
+			return importStatement;
 		} else {
 			const modifiers = this.parseGeneralModifiers();
 			currentToken = this.peek();
@@ -208,6 +224,17 @@ export class Parser {
 		}
 
 		return modifiers;
+	}
+	private parseIdentifierList(until?: string): Identifier[] {
+		const identifiers: Identifier[] = [];
+		while (this.peek().type === "Identifier" && this.peek().value !== until) {
+			identifiers.push(this.consume() as Identifier);
+			if (this.peek().type === "Symbol" && this.peek().value === ",") {
+				this.consume();
+				continue;
+			} else break;
+		}
+		return identifiers;
 	}
 	private parseBlock(endTokenType: TokenType, value: string): Block {
 		const block = createBlock([]);
@@ -304,6 +331,31 @@ export class Parser {
 	private parseBreakStatement(): BreakStatement {
 		this.expect("ReservedBreak");
 		return createBreakStatement();
+	}
+	private parseImportStatement(): ImportSourceStatement | ImportStdlibStatement {
+		this.consume();
+		const imports = this.parseIdentifierList("from");
+		if (imports.length === 0) throw new LPPSyntaxError("Missing imports from an import statement.");
+		this.expect("Identifier", "from", "Missing `from` after import specifiers");
+		if (this.peek().type === "String") {
+			const source = this.consume().value;
+			if (source.length === 0) throw new LPPSyntaxError("Expected a source file");
+			return {
+				type: "ImportSourceStatement",
+				source: source,
+				imports: imports,
+			};
+		} else {
+			this.expect("Symbol", "<", "Expected opening `<` to import an stdlib.");
+			const stdlib = this.expect("Identifier", "all", "Expected an stdlib");
+
+			this.expect("Symbol", ">", "Expected closing `>` to close the opening `<`.");
+			return {
+				type: "ImportStdlibStatement",
+				stdlib: stdlib.value,
+				imports: imports,
+			};
+		}
 	}
 	// ─────────────────────────────────────────────
 	// Declarations

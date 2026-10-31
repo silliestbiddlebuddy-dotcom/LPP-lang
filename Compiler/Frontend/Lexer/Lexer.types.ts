@@ -35,6 +35,7 @@ export const reservedK = [
 	"declare",
 	"readonly",
 	"new",
+	"import",
 ];
 export const symbols = [
 	",",
@@ -113,6 +114,7 @@ export const TokenTypeArray = [
 	"ReservedDeclare",
 	"ReservedReadonly",
 	"ReservedNew",
+	"ReservedImport",
 	"String",
 	"Number",
 	"Identifier",

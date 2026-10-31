@@ -1,0 +1,4 @@
+import sin from <math>;
+const local foo: string = "yo wassup";
+
+println(foo);

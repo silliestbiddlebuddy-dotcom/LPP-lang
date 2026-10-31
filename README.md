@@ -32,7 +32,7 @@ Program showcasing loops
 Program showcasing type declarations
 ### [Generics Showcase](github.com/silliestbiddlebuddy-dotcom/LPP-lang/blob/main/Examples/generics.lpp)
 Program showcasing generics (type parameters)
-### [Classes Showcase](https://github.com/silliestbiddlebuddy-dotcom/LPP-lang/blob/main/Examples/generics.lpp)
+### [Classes Showcase](https://github.com/silliestbiddlebuddy-dotcom/LPP-lang/blob/main/Examples/classes.lpp)
 Program showcasing classes
 
 ### 4. Features

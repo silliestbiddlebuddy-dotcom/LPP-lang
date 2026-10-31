@@ -18,6 +18,9 @@ export function isInterfaceKeyword(token: Token): boolean {
 export function isEnumKeyword(token: Token): boolean {
 	return token.type === "ReservedEnum";
 }
+export function isImportKeyword(token: Token): boolean {
+	return token.type === "ReservedImport";
+}
 export function isExtendsKeyword(token: Token): boolean {
 	return token.type === "ReservedExtends";
 }

@@ -1,13 +1,14 @@
 import type { TypeSymbol } from "../Binder/Symbol.ts";
+import type { Type } from "./Builtins.ts";
 
 export class TypeEnvironment {
 	public readonly data: Map<string, TypeSymbol>;
 	private parent?: TypeEnvironment | undefined;
-	constructor(information: { builtin?: { [typeName: string]: TypeSymbol }; parent?: TypeEnvironment }) {
+	constructor(information: { builtin?: Record<string, Type>; parent?: TypeEnvironment }) {
 		this.data = new Map<string, TypeSymbol>();
 		if (information.builtin) {
 			for (const [key, value] of Object.entries(information.builtin)) {
-				this.declareType(key, value);
+				this.declareBuiltin(key, value);
 			}
 		}
 		this.parent = information.parent;
@@ -31,5 +32,16 @@ export class TypeEnvironment {
 			this.data.set(key, value);
 			return true;
 		}
+	}
+	public declareBuiltin(key: string, value: Type): boolean {
+		if (this.data.has(key)) return false;
+
+		this.data.set(key, {
+			kind: "BuiltinType",
+			name: key,
+			type: value,
+		});
+
+		return true;
 	}
 }

@@ -10,8 +10,168 @@ import type {
 	PrefixUnaryOperator,
 } from "../../Parser/Parser.types.ts";
 import type { ClassSymbol } from "../Binder/Symbol.ts";
+export const LLVMPrimitiveTypes = {
+	float: {
+		llvmType: "float",
+		category: "floating",
+		bits: 32,
+	},
+	double: {
+		llvmType: "double",
+		category: "floating",
+		bits: 64,
+	},
+	int: {
+		llvmType: "i32",
+		category: "integer",
+		bits: 32,
+		signed: true,
+	},
 
-export type Type = Primitives | Derived | Literal | UserDefinedTypes;
+	int8: {
+		llvmType: "i8",
+		category: "integer",
+		bits: 8,
+		signed: true,
+	},
+	int16: {
+		llvmType: "i16",
+		category: "integer",
+		bits: 16,
+		signed: true,
+	},
+	int32: {
+		llvmType: "i32",
+		category: "integer",
+		bits: 32,
+		signed: true,
+	},
+	int64: {
+		llvmType: "i64",
+		category: "integer",
+		bits: 64,
+		signed: true,
+	},
+
+	uint8: {
+		llvmType: "i8",
+		category: "integer",
+		bits: 8,
+		signed: false,
+	},
+	uint16: {
+		llvmType: "i16",
+		category: "integer",
+		bits: 16,
+		signed: false,
+	},
+	uint32: {
+		llvmType: "i32",
+		category: "integer",
+		bits: 32,
+		signed: false,
+	},
+	uint64: {
+		llvmType: "i64",
+		category: "integer",
+		bits: 64,
+		signed: false,
+	},
+
+	float8: {
+		llvmType: "i8",
+		category: "unsupported-floating",
+		bits: 8,
+	},
+	float16: {
+		llvmType: "half",
+		category: "floating",
+		bits: 16,
+	},
+	float32: {
+		llvmType: "float",
+		category: "floating",
+		bits: 32,
+	},
+	float64: {
+		llvmType: "double",
+		category: "floating",
+		bits: 64,
+	},
+
+	boolean: {
+		llvmType: "i1",
+		category: "boolean",
+		bits: 1,
+	},
+	char: {
+		llvmType: "i32",
+		category: "character",
+		bits: 32,
+	},
+	string: {
+		llvmType: "ptr",
+		category: "reference",
+	},
+
+	null: {
+		llvmType: "ptr",
+		category: "reference",
+	},
+	undefined: {
+		llvmType: "ptr",
+		category: "reference",
+	},
+
+	any: {
+		llvmType: "ptr",
+		category: "dynamic",
+	},
+	unknown: {
+		llvmType: "ptr",
+		category: "dynamic",
+	},
+	never: {
+		llvmType: "void",
+		category: "bottom",
+	},
+	emptiness: {
+		llvmType: "void",
+		category: "void",
+	},
+} as const;
+export const BuiltinTypes: Record<string, Type> = {
+	float: { kind: "float" },
+	double: { kind: "double" },
+	int: { kind: "int" },
+
+	int8: { kind: "int8" },
+	int16: { kind: "int16" },
+	int32: { kind: "int32" },
+	int64: { kind: "int64" },
+
+	uint8: { kind: "uint8" },
+	uint16: { kind: "uint16" },
+	uint32: { kind: "uint32" },
+	uint64: { kind: "uint64" },
+
+	float8: { kind: "float8" },
+	float16: { kind: "float16" },
+	float32: { kind: "float32" },
+	float64: { kind: "float64" },
+
+	string: { kind: "string" },
+	boolean: { kind: "boolean" },
+	char: { kind: "char" },
+
+	any: { kind: "any" },
+	unknown: { kind: "unknown" },
+	never: { kind: "never" },
+	null: { kind: "null" },
+	undefined: { kind: "undefined" },
+	emptiness: { kind: "emptiness" },
+};
+export type Type = Primitives | Derived | Literal | UserDefinedTypes | Void;
 export type Primitives =
 	| Float
 	| Double
@@ -39,7 +199,7 @@ export type Primitives =
 	| Undefined;
 export type ObjectLike = Object | Class | Interface | UserDefinedType;
 export type Number = Float | Double | Int | Character | uint8 | uint16 | uint32 | uint64 | int8 | int16 | int32 | int64 | float8 | float16 | float32 | float64;
-export type Derived = Array<Type> | Pointer<Type> | Function;
+export type Derived = Array<Type> | Function;
 export type Literal = StringLiteral | BooleanLiteral | NumberLiteral;
 export type UserDefinedTypes = Union | Intersection | Class | Object | Interface | TypeParameter | UserDefinedType | TypeAlias;
 export type OperatorRule = {
@@ -375,10 +535,6 @@ export interface Interface {
 }
 // #endregion
 
-export interface TypedNode {
-	readonly resolvedType: Type;
+export interface Void {
+	readonly kind: "void";
 }
-
-export type TypedExpression = Expression & TypedNode;
-export type TypedDeclaration = DeclarationUnion & TypedNode;
-export type TypedProperty = Property & TypedNode;

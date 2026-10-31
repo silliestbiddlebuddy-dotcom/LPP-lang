@@ -1,0 +1,41 @@
+// https://github.com/silliestbiddlebuddy-dotcom/LPP-lang
+
+{
+	// General project configuration
+	"outDir": "./build",
+	"target": "",
+	"optimization": "2",
+
+	// Runtime configuration
+	"runtime": true,
+
+	// Set this if runtime.c is not in a default location.
+	// "runtimeFile": "/path/to/C/runtime/",
+
+	// Files and directories ignored by "lpp build"
+	"ignoreFiles": ["node_modules", "build", "dist"],
+
+	// Compiler flags
+	//"flags": {
+	//	"debug": false,
+	//	"tokens": false,
+	//	"ast": false,
+	//	"check": false
+	//},
+
+	// Linux target example:
+	// "target": "x86_64-unknown-linux-gnu",
+
+	// Windows target example:
+	// "target": "x86_64-pc-windows-msvc",
+
+	// Release configuration:
+	// "optimization": "3",
+
+	// Compiler development configuration:
+	"flags": {
+		"debug": true,
+		"tokens": false,
+		"ast": false
+	}
+}
