@@ -1,6 +1,6 @@
 # L++ — Made to be enjoyed
 <p align="center">
-  <img src="./assets/logo.svg" alt="L++ Logo" width="300">
+  <img src="./Assets/logo.svg" alt="L++ Logo" width="300">
 </p>
 L++ is a strongly and statically typed programming language
 compiled using LLVM, with its compiler written entirely in TypeScript.
