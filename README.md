@@ -1,7 +1,11 @@
 # L++ — Made to be enjoyed
-
+<p align="center">
+  <img src="./assets/logo.svg" alt="L++ Logo" width="300">
+</p>
 L++ is a strongly and statically typed programming language
 compiled using LLVM, with its compiler written entirely in TypeScript.
+
+It's inspired by Luau and C++ hence the name L++
 
 It follows a simple philosophy:
 
@@ -253,6 +257,42 @@ L++ is currently under active development.
 
 Some features are experimental or incomplete, and language
 syntax and compiler behaviour may change between releases.
+
+## FAQ
+Q: What is L++?
+> L++ is a statically compiled language
+Q: Is L++ Compiled or Interpreted?
+> L++ is compiled however inn the future it may also be interpreted
+Q: Is L++ open source?
+> No, L++ isn't open source **yet**
+Q: Is L++ suitable for beginners?
+> I'd say yes, L++ syntax is readable, it teaches you types, memory management, how to use CLIs... 
+Q: What platforms does L++ support?
+> Any platform supported by the required LLVM/Clang toolchain, provided the L++ runtime supports it.
+Q: Why is the compiler written in TypeScript?
+> Not many languages are written in it, and it was the language i knew most
+Q: Does L++ compile directly to machine code?
+> No L++ compiles to LLVM IR and then uses Clang to compile it into native machine code
+Q: Why does L++ require explicit type annotations?
+> It's easier for me to do type-checking and predictability for users
+Q: Why doesn't L++ have pointers?
+> So beginners dont have to learn references or dereferences directly, tho manual memory management will make it easier for them to understand them
+Q: How can I report a bug?
+> Open an issue and prefix it with "Bug: " in the title
+Q: Can I contribute to the compiler?
+> Not Yet
+Q: How can I propose a language feature?
+> Open an issue and prefix it with "Feature Suggestion: " in the title
+Q: How do I update L++?
+> Run `lpp update`
+Q: Can I write native code for L++?
+> Not right now, eventually yes. once i finish the module system and backend i'll work on interopability
+Q: How does L++ handle the standard library?
+> We have a folder name `std` and inside there's the libraries you import (math, io...),
+> Inside each one of them there are 3 files: `.h`, `.c` and `.lpp` file (eventually a `.ll` file too)
+> `.h` serves so the compiler can generate LLVM IR declarations
+> `.c` serves as the actual implementation
+> `.lpp` serves as L++ declarations for the typechecker
 
 ## License
 
