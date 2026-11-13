@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@designliquido/llvm-bindings": "^9.1.0",
     "@types/node": "^22.20.3",
     "@types/typescript": "^0.4.29",
     "chalk": "^6.0.1",
@@ -17,5 +18,8 @@
   },
   "scripts": {
     "lncount": "find . -type f   -not -path \"./node_modules/*\"   -not -path \"./.git/*\"   \\( -name \"*.ts\"  \\)   -print0 | xargs -0 wc -l"
+  },
+  "allowScripts": {
+    "@designliquido/llvm-bindings@9.1.0": true
   }
 }

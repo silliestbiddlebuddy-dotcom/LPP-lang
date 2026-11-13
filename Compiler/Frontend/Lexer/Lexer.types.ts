@@ -125,13 +125,19 @@ export type Modifier = "static" | "virtual" | "override" | "abstract" | "final" 
 export type AccessModifier = "public" | "private" | "protected";
 export type generalModifier = "export" | "declare";
 export type TokenType = (typeof TokenTypeArray)[number];
+export type Span = {
+	start: number;
+	end: number;
+};
 export class Token {
 	type: TokenType;
 	value: string;
 	rawVal: unknown;
-	constructor(type: TokenType, value: string, rawVal: unknown) {
+	position: Span;
+	constructor(type: TokenType, value: string, rawVal: unknown, position: Span) {
 		this.type = type;
 		this.value = value;
 		this.rawVal = rawVal;
+		this.position = position;
 	}
 }

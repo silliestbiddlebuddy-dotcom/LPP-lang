@@ -1,6 +1,9 @@
 import * as fs from "fs/promises";
 import path from "node:path";
-import { Token, TokenTypeArray, reservedK, symbols, type TokenType } from "./Lexer.types.ts";
+import { Token, TokenTypeArray, reservedK, symbols, type Span, type TokenType } from "./Lexer.types.ts";
+import type { DiagnosticReporter } from "../Diagnostics/DiagnosticReporter.ts";
+import { Diagnostic, DiagnosticSeverity } from "../Diagnostics/Diagnostic.ts";
+import { LPPError } from "../Errors/LPPError.ts";
 export async function readFile(filePath: string): Promise<string> {
 	let body;
 	try {
@@ -15,17 +18,23 @@ export class Lexer {
 	private source: string;
 	private tokens: Token[];
 	private pointer: number;
+	private lastTokenStart: number;
 	private bucket: string;
 	constructor(source: string) {
 		this.source = source;
 		this.tokens = [];
 		this.pointer = 0;
 		this.bucket = "";
+		this.lastTokenStart = 0;
 	}
 	public readSource() {
 		let currentChar;
+		this.lastTokenStart = 0;
 		for (this.pointer = 0; this.pointer < this.source.length; this.pointer++) {
 			currentChar = this.source.charAt(this.pointer);
+			if (this.bucket === "" && !/\s/.test(currentChar)) {
+				this.lastTokenStart = this.pointer;
+			}
 			if (currentChar === "." && this.bucket !== "" && /^\d+$/.test(this.bucket) && /\d/.test(this.lookAhead())) {
 				this.bucket += currentChar;
 				continue;
@@ -58,7 +67,7 @@ export class Lexer {
 					this.pointer++;
 
 					if (this.pointer >= this.source.length) {
-						throw new Error("unterminated string");
+						throw new LPPError("Unterminated string.");
 					}
 
 					currentChar = this.source.charAt(this.pointer);
@@ -70,7 +79,7 @@ export class Lexer {
 					value += currentChar;
 				}
 
-				this.tokens.push(new Token("String", value, openingChar + value + openingChar));
+				this.tokens.push(new Token("String", value, openingChar + value + openingChar, this.createSpan(this.lastTokenStart, this.pointer)));
 				continue;
 			}
 			if (symbols.includes(currentChar)) {
@@ -79,13 +88,13 @@ export class Lexer {
 					this.flushBucket();
 				}
 				if (symbols.includes(currentChar + this.lookAhead())) {
-					this.tokens.push(new Token("Symbol", currentChar + this.lookAhead(), currentChar + this.lookAhead()));
+					this.tokens.push(new Token("Symbol", currentChar + this.lookAhead(), currentChar + this.lookAhead(), this.createSpan(this.lastTokenStart, this.pointer)));
 					this.pointer++;
 
 					this.flushBucket();
 					continue;
 				}
-				this.tokens.push(new Token("Symbol", currentChar, currentChar));
+				this.tokens.push(new Token("Symbol", currentChar, currentChar, this.createSpan(this.lastTokenStart, this.pointer)));
 
 				continue;
 			}
@@ -96,26 +105,26 @@ export class Lexer {
 			this.tokens.push(this.convertToToken(this.bucket));
 			this.flushBucket();
 		}
-		this.tokens.push(new Token("EOF", "", ""));
+		this.tokens.push(new Token("EOF", "", "", this.createSpan(0, this.pointer)));
 		return this.tokens;
 	}
 	private convertToToken(text: string) {
 		if (/^\d+(\.\d+)?$/.test(text)) {
-			return new Token("Number", text, Number(text));
+			return new Token("Number", text, Number(text), this.createSpan(this.lastTokenStart, this.pointer));
 		}
 		if (!isNaN(Number(text))) {
-			return new Token("Number", text, Number(text));
+			return new Token("Number", text, Number(text), this.createSpan(this.lastTokenStart, this.pointer));
 		} else if (reservedK.includes(text)) {
 			const Uppercase = String(text).charAt(0).toUpperCase() + String(text).slice(1);
 
 			if (TokenTypeArray.includes(("Reserved" + Uppercase) as TokenType)) {
-				return new Token(("Reserved" + Uppercase) as TokenType, text, text);
+				return new Token(("Reserved" + Uppercase) as TokenType, text, text, this.createSpan(this.lastTokenStart, this.pointer));
 			} else {
-				throw new Error("Keyword " + text + " found inside reserved keywords array but not found token type");
+				throw new Error("Keyword " + text + " found inside reserved keywords array but couldn't find token type");
 			}
 		} else if (symbols.includes(text)) {
-			return new Token("Symbol", text, text);
-		} else return new Token("Identifier", text, text);
+			return new Token("Symbol", text, text, this.createSpan(this.lastTokenStart, this.pointer));
+		} else return new Token("Identifier", text, text, this.createSpan(this.lastTokenStart, this.pointer));
 	}
 	private flushBucket() {
 		this.bucket = "";
@@ -130,5 +139,15 @@ export class Lexer {
 	}
 	private lookAhead() {
 		return this.source.charAt(this.pointer + 1);
+	}
+	private createSpan(start: number, end: number): Span {
+		return {
+			start,
+			end,
+		};
+	}
+	private getColumn() {
+		const lastNewline = this.source.lastIndexOf("\n", this.pointer - 1);
+		return this.pointer - lastNewline - 1;
 	}
 }

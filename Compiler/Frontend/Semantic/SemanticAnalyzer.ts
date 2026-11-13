@@ -2,76 +2,46 @@ import { Lexer } from "../Lexer/Lexer.ts";
 import { Parser } from "../Parser/Parser.ts";
 import { Binder } from "./Binder/Binder.ts";
 import type { CompileOptions } from "./CompileOptions.ts";
-import { TypeChecker } from "./TypeChecker/TypeChecker.ts";
+import { Module } from "./Modules/Module.ts";
+import { ModuleLoader } from "./Modules/ModuleLoader.ts";
+import { ModuleResolver } from "./Modules/ModuleResolver.ts";
+import { TypeChecker, type TypedModule } from "./TypeChecker/TypeChecker.ts";
 import type { TypedASTType } from "./TypeChecker/TypedAST.ts";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { Chalk } from "chalk";
 const chalk = new Chalk();
-export interface SourceFile {
-	path: string;
-	name: string;
-	source: string;
-}
-export interface TypedSourceFile {
-	path: string;
-	name: string;
-	source: string;
-	typedAST: TypedASTType;
-	binder: Binder;
-}
+
 export class SemanticAnalyzer {
-	private sourceFiles: SourceFile[];
-	private typedSourceFiles: TypedSourceFile[];
-	constructor(files: SourceFile[]) {
-		this.sourceFiles = files;
-		this.typedSourceFiles = [];
-	}
-	public startSemanticAnalysis(compileOptions: CompileOptions): TypedSourceFile[] {
-		const typedSourceFiles: TypedSourceFile[] = [];
-		for (let index = 0; index < this.sourceFiles.length; index++) {
-			const sourceFile = this.sourceFiles[index]!;
-			typedSourceFiles.push(this.compileSourceFile(sourceFile, compileOptions));
+	private moduleLoader: ModuleLoader = new ModuleLoader();
+
+	constructor() {}
+	public analyzeDir(directory: string, compileOptions: CompileOptions): Set<TypedModule> {
+		try {
+			const files = this.resolveFiles(directory, fs.readdirSync(directory, { encoding: "utf-8", recursive: true }));
+			return this.analyzeFiles(files);
+		} catch (error) {
+			throw error;
 		}
-		return typedSourceFiles;
 	}
-	private compileSourceFile(sourceFile: SourceFile, compileOptions: CompileOptions): TypedSourceFile {
-		const lexer = new Lexer(sourceFile.source);
-		const tokens = lexer.readSource();
-		if (compileOptions.flags.tokens)
-			console.log(
-				chalk.greenBright(
-					"======================================================\n " +
-						chalk.underlineWhite("Tokens") +
-						"\n======================================================\n\n" +
-						JSON.stringify(tokens)
-				)
-			);
-
-		const parser = new Parser(tokens, sourceFile.name);
-		const AST = parser.parse();
-		if (compileOptions.flags.ast)
-			console.log(
-				chalk.greenBright(
-					"======================================================\n " +
-						chalk.underlineWhite("Abstract Syntax Tree") +
-						"\n======================================================\n\n" +
-						JSON.stringify(AST)
-				)
-			);
-
-		const binder = new Binder(AST);
-		binder.bind();
-
-		const typeChecker = new TypeChecker(AST, binder.globalEnvironment, binder.globalScope, binder);
-		const typedAST = typeChecker.typeCheck();
-		return this.createTypedSourceFile(sourceFile, typedAST, binder);
+	private resolveFiles(directory: string, files: string[]): string[] {
+		const absolutePaths: string[] = [];
+		for (let index = 0; index < files.length; index++) {
+			const file = files[index]!;
+			absolutePaths.push(fs.realpathSync(path.resolve(directory, file)));
+		}
+		return absolutePaths;
 	}
-	private createTypedSourceFile(sourceFile: SourceFile, typedAST: TypedASTType, binder: Binder): TypedSourceFile {
-		return {
-			path: sourceFile.path,
-			name: sourceFile.name,
-			source: sourceFile.source,
-			typedAST: typedAST,
-			binder: binder,
-		};
+	private analyzeFiles(files: string[]): Set<TypedModule> {
+		const modules: Module[] = [];
+		for (let index = 0; index < files.length; index++) {
+			const file = files[index]!;
+			modules.push(this.moduleLoader.loadModule(file));
+		}
+		const binder = new Binder(modules, this.moduleLoader.resolver);
+		binder.bind;
+		const typeChecker = new TypeChecker(binder);
+		typeChecker.typeCheck();
+		return typeChecker.typedModules;
 	}
 }

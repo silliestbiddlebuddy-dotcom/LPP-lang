@@ -3,6 +3,7 @@ import type {
 	Declaration,
 	FunctionDeclaration,
 	GenericParameter,
+	Import,
 	InterfaceDeclaration,
 	Parameter,
 	Property,
@@ -93,7 +94,14 @@ export interface GenericParameterSymbol {
 	declaration: GenericParameter;
 	scope: ScopeTable;
 }
+export interface ImportedSymbol {
+	readonly kind: "Import";
+	name: string;
+	symbol: Symbol;
+	scope: ScopeTable;
+	environment: TypeEnvironment;
+}
 
-export type RuntimeSymbol = VariableSymbol | ParameterSymbol | FunctionSymbol | ClassSymbol | PropertySymbol | MethodSymbol | BuiltinDeclarationSymbol;
-export type TypeSymbol = InterfaceSymbol | TypeAliasSymbol | UserDefinedTypeSymbol | ClassSymbol | GenericParameterSymbol | BuiltinTypeSymbol;
+export type RuntimeSymbol = VariableSymbol | ParameterSymbol | FunctionSymbol | ClassSymbol | PropertySymbol | MethodSymbol | BuiltinDeclarationSymbol | ImportedSymbol;
+export type TypeSymbol = InterfaceSymbol | TypeAliasSymbol | UserDefinedTypeSymbol | ClassSymbol | GenericParameterSymbol | BuiltinTypeSymbol | ImportedSymbol;
 export type Symbol = RuntimeSymbol | TypeSymbol;

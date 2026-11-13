@@ -1,5 +1,13 @@
 import { LPPTypeError } from "../../Errors/LPPTypeError.ts";
-import type { BinaryOperator, Expression, FunctionDeclaration, Identifier, PrefixUnaryOperator, Type as TypeNode } from "../../Parser/Parser.types.ts";
+import {
+	NodeKind,
+	type BinaryOperator,
+	type Expression,
+	type FunctionDeclaration,
+	type Identifier,
+	type PrefixUnaryOperator,
+	type Type as TypeNode,
+} from "../../Parser/Parser.types.ts";
 import type { ScopeTable } from "../Binder/Scope.ts";
 import type { Symbol } from "../Binder/Symbol.ts";
 import {
@@ -24,25 +32,19 @@ import type { TypeEnvironment } from "../Environment/TypeEnvironment.ts";
 import { isLiteral, isNumber, isPrimitive } from "../TypeChecker/Assignability.ts";
 
 export class Resolver {
-	public currentEnvironment: TypeEnvironment;
-	public currentScope: ScopeTable;
-	constructor(currentEnvironment: TypeEnvironment, currentScope: ScopeTable) {
-		this.currentEnvironment = currentEnvironment;
-		this.currentScope = currentScope;
-	}
-	public resolveType(node: TypeNode | FunctionDeclaration, environment: TypeEnvironment): Type {
+	public resolveType(node: TypeNode | FunctionDeclaration, scope: ScopeTable, environment: TypeEnvironment): Type {
 		switch (node.type) {
-			case "NumberLiteral":
+			case NodeKind.NumberLiteral:
 				return { kind: "numberLiteral", value: node.value };
 
-			case "StringLiteral":
+			case NodeKind.StringLiteral:
 				return { kind: "stringLiteral", value: node.value };
-			case "BooleanLiteral":
+			case NodeKind.BooleanLiteral:
 				return { kind: "booleanLiteral", value: node.value };
-			case "TypeReference": {
+			case NodeKind.TypeReference: {
 				const type = environment.lookup(node.identifier.value);
 				if (!type) throw new LPPTypeError("Type `" + node.identifier.value + "` does not exist.");
-				let resolvedType = this.resolveTypeFromSymbol(type, environment);
+				let resolvedType = this.resolveTypeFromSymbol(type, scope, environment);
 				if (node.optional) {
 					resolvedType = {
 						kind: "union",
@@ -51,22 +53,22 @@ export class Resolver {
 				}
 				return resolvedType;
 			}
-			case "UnionType": {
+			case NodeKind.UnionType: {
 				const types: Type[] = [];
-				this.visit(types, node.typeA, environment);
-				this.visit(types, node.typeB, environment);
+				this.visit(types, node.typeA, scope, environment);
+				this.visit(types, node.typeB, scope, environment);
 
 				return { kind: "union", types: types };
 			}
-			case "IntersectionType": {
+			case NodeKind.IntersectionType: {
 				const types: Type[] = [];
-				this.visit(types, node.typeA, environment);
-				this.visit(types, node.typeB, environment);
+				this.visit(types, node.typeA, scope, environment);
+				this.visit(types, node.typeB, scope, environment);
 
 				return { kind: "intersection", types: types };
 			}
 
-			case "FunctionType": {
+			case NodeKind.FunctionType: {
 				const parameters: Parameter[] = [];
 				const typeParameters: TypeParameter[] = [];
 				for (let index = 0; index < node.parameters.length; index++) {
@@ -74,7 +76,7 @@ export class Resolver {
 					parameters.push({
 						kind: "parameter",
 						name: parameter.name.value,
-						type: this.resolveType(parameter.parameterType, environment),
+						type: this.resolveType(parameter.parameterType, scope, environment),
 					});
 				}
 				for (let index = 0; index < node.genericParameters.length; index++) {
@@ -82,25 +84,25 @@ export class Resolver {
 					typeParameters.push({
 						kind: "typeParameter",
 						name: typeParameter.identifier,
-						constraint: this.resolveType(typeParameter.value, environment),
+						constraint: this.resolveType(typeParameter.value, scope, environment),
 					});
 				}
 
-				return { kind: "function", returnType: this.resolveType(node.returnType, environment), parameters: parameters, typeParameters: typeParameters };
+				return { kind: "function", returnType: this.resolveType(node.returnType, scope, environment), parameters: parameters, typeParameters: typeParameters };
 			}
-			case "ArrayLiteralExpression": {
+			case NodeKind.ArrayLiteralExpression: {
 				let elementType: Type | Union = {
 					kind: "emptiness",
 				};
 				if (node.elements.length === 0) return elementType;
-				if (node.elements.length === 1) return this.resolveExpression(node.elements[0]!);
+				if (node.elements.length === 1) return this.resolveExpression(node.elements[0]!, scope, environment);
 				elementType = {
 					kind: "union",
 					types: [],
 				};
 				for (let index = 0; index < node.elements.length; index++) {
 					const element = node.elements[index]!;
-					const resolvedElementType = this.resolveExpression(element);
+					const resolvedElementType = this.resolveExpression(element, scope, environment);
 					if (elementType.types.includes(resolvedElementType)) continue;
 					elementType.types.push(resolvedElementType);
 				}
@@ -109,7 +111,7 @@ export class Resolver {
 					elementType: elementType,
 				};
 			}
-			case "ObjectExpression": {
+			case NodeKind.ObjectExpression: {
 				const object: Object = {
 					kind: "object",
 					members: new Map<string, Property>(),
@@ -121,20 +123,20 @@ export class Resolver {
 						kind: "property",
 						accessModifier: element.accessModifier,
 						modifiers: element.modifiers,
-						type: this.resolveType(element.propertyType, environment),
+						type: this.resolveType(element.propertyType, scope, environment),
 						name: element.identifier,
 					});
 				}
 				return object;
 			}
-			case "FunctionDeclaration": {
+			case NodeKind.FunctionDeclaration: {
 				const parameters: Parameter[] = [];
 				for (let index = 0; index < node.parameters.length; index++) {
 					const element = node.parameters[index]!;
 					parameters.push({
 						kind: "parameter",
 						name: element.name.value,
-						type: this.resolveType(element.parameterType, environment),
+						type: this.resolveType(element.parameterType, scope, environment),
 					});
 				}
 				const typeParameters: TypeParameter[] = [];
@@ -143,12 +145,12 @@ export class Resolver {
 					typeParameters.push({
 						kind: "typeParameter",
 						name: element.identifier,
-						constraint: this.resolveType(element.value, environment),
+						constraint: this.resolveType(element.value, scope, environment),
 					});
 				}
 				const functionType: Function = {
 					kind: "function",
-					returnType: this.resolveType(node.returnType, environment),
+					returnType: this.resolveType(node.returnType, scope, environment),
 					parameters: parameters,
 					typeParameters: typeParameters,
 				};
@@ -156,22 +158,22 @@ export class Resolver {
 			}
 		}
 	}
-	public resolveExpression(node: Expression): Type {
+	public resolveExpression(node: Expression, scope: ScopeTable, environment: TypeEnvironment): Type {
 		switch (node.type) {
-			case "NumberLiteral":
+			case NodeKind.NumberLiteral:
 				return { kind: "numberLiteral", value: node.value };
 
-			case "StringLiteral":
+			case NodeKind.StringLiteral:
 				return { kind: "stringLiteral", value: node.value };
-			case "BooleanLiteral":
+			case NodeKind.BooleanLiteral:
 				return { kind: "booleanLiteral", value: node.value };
-			case "Identifier": {
-				const symbol = this.currentScope.lookup(node.value);
+			case NodeKind.Identifier: {
+				const symbol = scope.lookup(node.value);
 				if (!symbol) throw new LPPTypeError("Could not resolve symbol `" + node.value + "`.");
-				return this.resolveTypeFromSymbol(symbol, this.currentEnvironment);
+				return this.resolveTypeFromSymbol(symbol, scope, environment);
 			}
-			case "FunctionCallExpression": {
-				const functionType = this.resolveExpression(node.callee);
+			case NodeKind.FunctionCallExpression: {
+				const functionType = this.resolveExpression(node.callee, scope, environment);
 				if (isLiteral(functionType)) {
 					throw new LPPTypeError("Cannot call a literal value.");
 				}
@@ -181,24 +183,24 @@ export class Resolver {
 				for (let index = 0; index < node.arguments.length; index++) {
 					const argument = node.arguments[index]!;
 					const parameter = functionType.parameters[index]!;
-					const resolvedArgument = this.resolveExpression(argument.value);
-					if (!this.isAssignableTo(resolvedArgument, parameter.type, this.currentEnvironment))
+					const resolvedArgument = this.resolveExpression(argument.value, scope, environment);
+					if (!this.isAssignableTo(resolvedArgument, parameter.type, environment))
 						throw new LPPTypeError("Argument of type `" + resolvedArgument.kind + "` is not assignable to parameter of type `" + parameter.type + "`.");
 				}
 				return functionType.returnType;
 			}
 
-			case "BinaryExpression": {
-				return this.getBinaryOperatorReturnType(node.left, node.operator, node.right);
+			case NodeKind.BinaryExpression: {
+				return this.getBinaryOperatorReturnType(node.left, node.operator, node.right, scope, environment);
 			}
-			case "ObjectExpression": {
+			case NodeKind.ObjectExpression: {
 				const members = new Map<string, Property>();
 				for (let index = 0; index < node.properties.length; index++) {
 					const element = node.properties[index]!;
 					members.set(element.identifier, {
 						kind: "property",
 						name: element.identifier,
-						type: this.resolveType(element.propertyType, this.currentEnvironment),
+						type: this.resolveType(element.propertyType, scope, environment),
 						modifiers: element.modifiers,
 						accessModifier: element.accessModifier,
 					});
@@ -208,22 +210,22 @@ export class Resolver {
 					members: members,
 				};
 			}
-			case "PrefixUnaryExpression": {
-				return this.getPrefixUnaryOperatorReturnType(node.value, node.operator);
+			case NodeKind.PrefixUnaryExpression: {
+				return this.getPrefixUnaryOperatorReturnType(node.value, node.operator, scope, environment);
 			}
-			case "ArrayLiteralExpression": {
+			case NodeKind.ArrayLiteralExpression: {
 				let elementType: Type | Union = {
 					kind: "emptiness",
 				};
 				if (node.elements.length === 0) return elementType;
-				if (node.elements.length === 1) return this.resolveExpression(node.elements[0]!);
+				if (node.elements.length === 1) return this.resolveExpression(node.elements[0]!, scope, environment);
 				elementType = {
 					kind: "union",
 					types: [],
 				};
 				for (let index = 0; index < node.elements.length; index++) {
 					const element = node.elements[index]!;
-					const resolvedElementType = this.resolveExpression(element);
+					const resolvedElementType = this.resolveExpression(element, scope, environment);
 					if (elementType.types.includes(resolvedElementType)) continue;
 					elementType.types.push(resolvedElementType);
 				}
@@ -232,9 +234,9 @@ export class Resolver {
 					elementType: elementType,
 				};
 			}
-			case "IndexExpression": {
-				const resolvedIndex = this.resolveExpression(node.index);
-				const resolvedObject = this.resolveExpression(node.object);
+			case NodeKind.IndexExpression: {
+				const resolvedIndex = this.resolveExpression(node.index, scope, environment);
+				const resolvedObject = this.resolveExpression(node.object, scope, environment);
 				if (resolvedObject.kind !== "array") throw new LPPTypeError("Cannot index a value of type `" + resolvedObject.kind + "`, you can only index arrays.");
 				if (!numericTypes.includes(resolvedIndex))
 					throw new LPPTypeError(
@@ -242,8 +244,8 @@ export class Resolver {
 					);
 				return resolvedObject.elementType;
 			}
-			case "MemberAccessExpression": {
-				const resolvedObject = this.resolveExpression(node.object);
+			case NodeKind.MemberAccessExpression: {
+				const resolvedObject = this.resolveExpression(node.object, scope, environment);
 				if (!(resolvedObject.kind === "object" || resolvedObject.kind === "class" || resolvedObject.kind === "interface" || resolvedObject.kind === "userDefinedType"))
 					throw new LPPTypeError("Cannot access a non-object like value such as `" + resolvedObject.kind + "`.");
 				const resolvedMember = this.resolveMember(
@@ -254,16 +256,16 @@ export class Resolver {
 				return resolvedMember;
 			}
 
-			case "AssertionExpression": {
-				const resolvedTarget = this.resolveType(node.target, this.currentEnvironment);
-				const resolvedValue = this.resolveExpression(node.value);
-				if (this.isAssignableTo(resolvedValue, resolvedTarget, this.currentEnvironment)) return resolvedTarget;
+			case NodeKind.AssertionExpression: {
+				const resolvedTarget = this.resolveType(node.target, scope, environment);
+				const resolvedValue = this.resolveExpression(node.value, scope, environment);
+				if (this.isAssignableTo(resolvedValue, resolvedTarget, environment)) return resolvedTarget;
 				throw new LPPTypeError("Cannot assert value  `" + resolvedValue.kind + "` to the type `" + resolvedTarget.kind + "`. They don't seem to have anything in common");
 			}
 			//todo
-			case "ConstructorExpression": {
+			case NodeKind.ConstructorExpression: {
 			}
-			case "PostfixUnaryExpression":
+			case NodeKind.PostfixUnaryExpression:
 
 			default:
 				throw new LPPTypeError("Unknown expression `" + node.type + "`.");
@@ -330,17 +332,17 @@ export class Resolver {
 
 		return member;
 	}
-	public visit(array: Type[], value: TypeNode, environment: TypeEnvironment): void {
-		if (value.type === "IntersectionType" || value.type === "UnionType") {
-			this.visit(array, value.typeA, environment);
-			this.visit(array, value.typeB, environment);
+	public visit(array: Type[], value: TypeNode, scope: ScopeTable, environment: TypeEnvironment): void {
+		if (value.type === NodeKind.IntersectionType || value.type === NodeKind.UnionType) {
+			this.visit(array, value.typeA, scope, environment);
+			this.visit(array, value.typeB, scope, environment);
 		} else {
-			array.push(this.resolveType(value, environment));
+			array.push(this.resolveType(value, scope, environment));
 		}
 	}
-	public getBinaryOperatorReturnType(left: Expression, operator: BinaryOperator, right: Expression): Type {
-		const resolvedLeft = this.resolveExpression(left);
-		const resolvedRight = this.resolveExpression(right);
+	public getBinaryOperatorReturnType(left: Expression, operator: BinaryOperator, right: Expression, scope: ScopeTable, environment: TypeEnvironment): Type {
+		const resolvedLeft = this.resolveExpression(left, scope, environment);
+		const resolvedRight = this.resolveExpression(right, scope, environment);
 		const rule = BinaryOperatorTable[operator].find((rule) =>
 			rule.allowedTypes.some((type) => {
 				if (!this.isSameType(resolvedLeft, type) || !this.isSameType(resolvedRight, type)) {
@@ -360,8 +362,8 @@ export class Resolver {
 		if (rule.returnType === "same") return resolvedLeft;
 		return rule.returnType;
 	}
-	public getPrefixUnaryOperatorReturnType(value: Expression, operator: PrefixUnaryOperator): Type {
-		const resolvedValue = this.resolveExpression(value);
+	public getPrefixUnaryOperatorReturnType(value: Expression, operator: PrefixUnaryOperator, scope: ScopeTable, environment: TypeEnvironment): Type {
+		const resolvedValue = this.resolveExpression(value, scope, environment);
 		const rule = PrefixUnaryOperatorTable[operator].find((rule) =>
 			rule.allowedTypes.some((type) => {
 				if (!this.isSameType(resolvedValue, type)) {
@@ -383,14 +385,14 @@ export class Resolver {
 	public isExtendable(node: Type): node is Interface | Intersection | Object {
 		return node.kind === "interface" || node.kind === "intersection" || node.kind === "object";
 	}
-	public resolveMethod(method: FunctionDeclaration, environment: TypeEnvironment): Method {
+	public resolveMethod(method: FunctionDeclaration, scope: ScopeTable, environment: TypeEnvironment): Method {
 		const parameters: Parameter[] = [];
 		for (let index = 0; index < method.parameters.length; index++) {
 			const element = method.parameters[index]!;
 			parameters.push({
 				kind: "parameter",
 				name: element.name.value,
-				type: this.resolveType(element.parameterType, environment),
+				type: this.resolveType(element.parameterType, scope, environment),
 			});
 		}
 		const typeParameters: TypeParameter[] = [];
@@ -399,14 +401,14 @@ export class Resolver {
 			typeParameters.push({
 				kind: "typeParameter",
 				name: element.identifier,
-				constraint: this.resolveType(element.value, environment),
+				constraint: this.resolveType(element.value, scope, environment),
 			});
 		}
 		return {
 			kind: "method",
 			name: method.name.value,
 			parameters: parameters,
-			returnType: this.resolveType(method.returnType, environment),
+			returnType: this.resolveType(method.returnType, scope, environment),
 			typeParameters: typeParameters,
 		};
 	}
@@ -452,13 +454,13 @@ export class Resolver {
 			}
 		}
 	}
-	public resolveTypeFromSymbol(symbol: Symbol, environment: TypeEnvironment): Type {
+	public resolveTypeFromSymbol(symbol: Symbol, scope: ScopeTable, environment: TypeEnvironment): Type {
 		switch (symbol.kind) {
 			case "Variable": {
-				return this.resolveType(symbol.declaration.variableType, environment);
+				return this.resolveType(symbol.declaration.variableType, scope, environment);
 			}
 			case "Parameter": {
-				return this.resolveType(symbol.declaration.parameterType, environment);
+				return this.resolveType(symbol.declaration.parameterType, scope, environment);
 			}
 			case "Function":
 			case "Method": {
@@ -468,7 +470,7 @@ export class Resolver {
 					parameters.push({
 						kind: "parameter",
 						name: element.name.value,
-						type: this.resolveType(element.parameterType, environment),
+						type: this.resolveType(element.parameterType, scope, environment),
 					});
 				}
 				const typeParameters: TypeParameter[] = [];
@@ -477,13 +479,13 @@ export class Resolver {
 					typeParameters.push({
 						kind: "typeParameter",
 						name: element.identifier,
-						constraint: this.resolveType(element.value, environment),
+						constraint: this.resolveType(element.value, scope, environment),
 					});
 				}
 				return {
 					kind: "function",
 					parameters: parameters,
-					returnType: this.resolveType(symbol.declaration.returnType, environment),
+					returnType: this.resolveType(symbol.declaration.returnType, scope, environment),
 					typeParameters: typeParameters,
 				};
 			}
@@ -496,7 +498,7 @@ export class Resolver {
 					properties.push({
 						kind: "property",
 						name: element.identifier,
-						type: this.resolveType(element.propertyType, environment),
+						type: this.resolveType(element.propertyType, scope, environment),
 						accessModifier: element.accessModifier,
 						modifiers: element.modifiers,
 					});
@@ -504,13 +506,13 @@ export class Resolver {
 				const methods: Method[] = [];
 				for (let i = 0; i < symbol.declaration.methods.length; i++) {
 					const method = symbol.declaration.methods[i]!;
-					methods.push(this.resolveMethod(method, environment));
+					methods.push(this.resolveMethod(method, scope, environment));
 				}
 
 				const interfaces: Interface[] = [];
 				for (let index = 0; index < symbol.declaration.hierarchy.implements.length; index++) {
 					const element = symbol.declaration.hierarchy.implements[index]!;
-					const resolvedElement = this.resolveType(element, environment);
+					const resolvedElement = this.resolveType(element, scope, environment);
 
 					this.implementToClass(resolvedElement, interfaces);
 				}
@@ -520,14 +522,14 @@ export class Resolver {
 					typeParameters.push({
 						kind: "typeParameter",
 						name: element.identifier,
-						constraint: this.resolveType(element.value, environment),
+						constraint: this.resolveType(element.value, scope, environment),
 					});
 				}
 
 				let superClass: Class | undefined = undefined;
 				for (let index = 0; index < symbol.declaration.hierarchy.extends.length; index++) {
 					const element = symbol.declaration.hierarchy.extends[index]!;
-					const resolvedElement = this.resolveType(element, environment);
+					const resolvedElement = this.resolveType(element, scope, environment);
 					if (resolvedElement.kind !== "class") throw new LPPTypeError(`A class cannot extend type \`${resolvedElement.kind}\`.`);
 					superClass = resolvedElement;
 				}
@@ -554,7 +556,7 @@ export class Resolver {
 					const element = symbol.declaration.properties[index]!;
 					object.members.set(element.identifier, {
 						kind: "property",
-						type: this.resolveType(element.propertyType, environment),
+						type: this.resolveType(element.propertyType, scope, environment),
 						accessModifier: element.accessModifier,
 						modifiers: element.modifiers,
 						name: element.identifier,
@@ -566,14 +568,14 @@ export class Resolver {
 					typeParameters.push({
 						kind: "typeParameter",
 						name: element.identifier,
-						constraint: this.resolveType(element.value, environment),
+						constraint: this.resolveType(element.value, scope, environment),
 					});
 				}
 				if (symbol.declaration.hierarchy.implements.length > 0) throw new LPPTypeError("An interface cannot have an implements clause.");
 				const interfaces: Interface[] = [];
 				for (let index = 0; index < symbol.declaration.hierarchy.extends.length; index++) {
 					const element = symbol.declaration.hierarchy.extends[index]!;
-					const resolvedElement = this.resolveType(element, environment);
+					const resolvedElement = this.resolveType(element, scope, environment);
 					if (!this.isExtendable(resolvedElement)) throw new LPPTypeError(`An interface cannot extend type \`${resolvedElement.kind}\`.`);
 					this.extendToInterface(resolvedElement, interfaces);
 				}
@@ -589,7 +591,7 @@ export class Resolver {
 				return {
 					kind: "typeAlias",
 					name: symbol.name,
-					type: this.resolveType(symbol.declaration.value, environment),
+					type: this.resolveType(symbol.declaration.value, scope, environment),
 				};
 			}
 			case "UserDefinedType": {
@@ -601,7 +603,7 @@ export class Resolver {
 					const element = symbol.declaration.properties[index]!;
 					object.members.set(element.identifier, {
 						kind: "property",
-						type: this.resolveType(element.propertyType, environment),
+						type: this.resolveType(element.propertyType, scope, environment),
 						accessModifier: element.accessModifier,
 						modifiers: element.modifiers,
 						name: element.identifier,
@@ -613,7 +615,7 @@ export class Resolver {
 					typeParameters.push({
 						kind: "typeParameter",
 						name: element.identifier,
-						constraint: this.resolveType(element.value, environment),
+						constraint: this.resolveType(element.value, scope, environment),
 					});
 				}
 
@@ -625,19 +627,21 @@ export class Resolver {
 				};
 			}
 			case "Property": {
-				return this.resolveType(symbol.declaration.propertyType, environment);
+				return this.resolveType(symbol.declaration.propertyType, scope, environment);
 			}
 			case "GenericParameter": {
 				return {
 					kind: "typeParameter",
 					name: symbol.name,
-					constraint: this.resolveType(symbol.declaration.value, environment),
+					constraint: this.resolveType(symbol.declaration.value, scope, environment),
 				};
 			}
 			case "BuiltinType":
 				return symbol.type;
 			case "BuiltinDeclaration":
 				return symbol.functionType;
+			case "Import":
+				return this.resolveTypeFromSymbol(symbol.symbol, symbol.scope, symbol.environment);
 		}
 	}
 	public isSameType(firstType: Type, secondType: Type): boolean {

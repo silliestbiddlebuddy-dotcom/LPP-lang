@@ -56,7 +56,6 @@ export type TypedFunctionCallExpression = TypedChildren<
 		arguments: TypedArgument[];
 	}
 >;
-
 export type TypedArrayLiteralExpression = TypedChildren<AST.ArrayLiteralExpression, "elements", { elements: TypedExpression[] }>;
 
 export type TypedIndexExpression = TypedChildren<
@@ -268,6 +267,8 @@ export type TypedIfStatement = TypedStatementBase<AST.IfStatement, "condition" |
 	elseIfs: TypedElseifStatement[];
 	else?: TypedBlock | null;
 };
+export type TypedImportSourceStatement = TypedStatementBase<AST.ImportSourceStatement>;
+export type TypedImportStdlibStatement = TypedStatementBase<AST.ImportStdlibStatement>;
 
 export type TypedElseifStatement = TypedStatementBase<AST.ElseifStatement, "condition" | "body"> & {
 	condition: TypedExpression;
@@ -307,7 +308,9 @@ export type TypedStatement =
 	| TypedForStatement
 	| TypedWhileStatement
 	| TypedAssignmentStatement
-	| TypedDeclaration;
+	| TypedDeclaration
+	| TypedImportSourceStatement
+	| TypedImportStdlibStatement;
 
 // ============================================================
 // Complete typed AST
@@ -590,7 +593,16 @@ export function createTypedInterfaceDeclaration(
 // ============================================================
 // Statement factories — no resolvedType
 // ============================================================
-
+export function createTypedImportSourceStatement(node: AST.ImportSourceStatement): TypedImportSourceStatement {
+	return {
+		...node,
+	};
+}
+export function createTypedImportStdlibStatement(node: AST.ImportStdlibStatement): TypedImportStdlibStatement {
+	return {
+		...node,
+	};
+}
 export function createTypedIfStatement(
 	node: AST.IfStatement,
 	condition: TypedExpression,

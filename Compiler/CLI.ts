@@ -13,10 +13,7 @@ import { spawnSync } from "node:child_process";
 import { parse, printParseErrorCode, type ParseError } from "jsonc-parser";
 
 import { SemanticAnalyzer } from "./Frontend/Semantic/SemanticAnalyzer.ts";
-import type {
-	CompileOptions,
-	// Keep this import if TypedSourceFile is exported by SemanticAnalyzer.ts.
-} from "./Frontend/Semantic/CompileOptions.ts";
+import type { CompileOptions } from "./Frontend/Semantic/CompileOptions.ts";
 import type { TypedSourceFile } from "./Frontend/Semantic/SemanticAnalyzer.ts";
 
 import { LLVMBackend } from "./Backend/LLVM/LLVMBackend.ts";
@@ -173,34 +170,66 @@ const CONFIG_TEMPLATE = `// https://github.com/silliestbiddlebuddy-dotcom/LPP-la
 `;
 
 // ============================================================
+// Colors
+// ============================================================
+
+const colors = {
+	brand: chalk.hex("#C4B5FD").bold,
+	info: chalk.hex("#38BDF8"),
+	success: chalk.hex("#4ADE80"),
+	warning: chalk.hex("#FBBF24"),
+	error: chalk.hex("#FB7185"),
+	debug: chalk.hex("#C084FC"),
+	muted: chalk.hex("#94A3B8"),
+	path: chalk.hex("#67E8F9").bold,
+	command: chalk.hex("#A78BFA").bold,
+};
+
+// ============================================================
 // Logging
 // ============================================================
 
 const log = {
 	info(message: string, quiet = false): void {
 		if (!quiet) {
-			console.log(chalk.blue("info"), message);
+			console.log(colors.info(`◆ ${message}`));
 		}
 	},
 
 	success(message: string, quiet = false): void {
 		if (!quiet) {
-			console.log(chalk.green("success"), message);
+			console.log(colors.success(`✓ ${message}`));
 		}
 	},
 
 	warning(message: string): void {
-		console.warn(chalk.yellow("warning"), message);
+		console.warn(colors.warning(`⚠ ${message}`));
 	},
 
 	error(message: string): void {
-		console.error(chalk.red("error"), message);
+		console.error(colors.error(`✖ ${message}`));
 	},
 
-	verbose(message: string, enabled: boolean): void {
-		if (enabled) {
-			console.log(chalk.gray("[verbose]"), message);
+	debug(message: string, enabled: boolean, quiet = false): void {
+		if (enabled && !quiet) {
+			console.log(colors.debug(`[debug] ${message}`));
 		}
+	},
+
+	verbose(message: string, enabled: boolean, quiet = false): void {
+		if (enabled && !quiet) {
+			console.log(colors.muted(`  ↳ ${message}`));
+		}
+	},
+
+	section(message: string, quiet = false): void {
+		if (!quiet) {
+			console.log(`\n${colors.brand(message)}`);
+		}
+	},
+
+	path(value: string): string {
+		return colors.path(value);
 	},
 };
 
@@ -222,8 +251,14 @@ function resolveOutputPath(output: string | undefined, defaultPath: string, base
 	return path.resolve(baseDirectory, output ?? defaultPath);
 }
 
-function runExecutable(executable: string): void {
-	log.info(`Running ${executable}`);
+function formatCommand(command: string, args: string[]): string {
+	return [command, ...args].map((argument) => (/\s/.test(argument) ? JSON.stringify(argument) : argument)).join(" ");
+}
+
+function runExecutable(executable: string, settings: BuildSettings): void {
+	log.info(`Running ${log.path(executable)}`, settings.quiet);
+
+	log.debug(`Executing ${executable}`, settings.debug, settings.quiet);
 
 	const result = spawnSync(executable, [], {
 		stdio: "inherit",
@@ -292,6 +327,16 @@ function validateConfig(value: unknown): LppConfig {
 
 	if (config.flags !== undefined && (config.flags === null || typeof config.flags !== "object" || Array.isArray(config.flags))) {
 		throw new Error('"flags" must be an object.');
+	}
+
+	if (config.flags !== undefined) {
+		const flags = config.flags as Record<string, unknown>;
+
+		for (const name of ["debug", "tokens", "ast", "check"] as const) {
+			if (flags[name] !== undefined && typeof flags[name] !== "boolean") {
+				throw new Error(`"flags.${name}" must be a boolean.`);
+			}
+		}
 	}
 
 	return config as LppConfig;
@@ -407,14 +452,19 @@ async function resolveSettings(projectRoot: string, cli: CLIOptions): Promise<Bu
 		check: cli.check ?? config.flags?.check ?? false,
 
 		emit: cli.emit !== false,
+
 		run: cli.run ?? false,
 
 		clangWarnings: cli.clangWarnings ?? false,
+
 		warningsAsErrors: cli.warningsAsErrors ?? false,
+
 		strip: cli.strip ?? false,
+
 		keepLLVM: cli.keepLLVM ?? false,
 
 		verbose: cli.verbose ?? false,
+
 		quiet: cli.quiet ?? false,
 
 		ignoreFiles: config.ignoreFiles ?? [],
@@ -423,6 +473,26 @@ async function resolveSettings(projectRoot: string, cli: CLIOptions): Promise<Bu
 	if (settings.run && !settings.emit) {
 		throw new Error("--run cannot be used with --no-emit.");
 	}
+
+	if (settings.run && settings.check) {
+		throw new Error("--run cannot be used with --check.");
+	}
+
+	if (settings.keepLLVM && settings.check) {
+		throw new Error("--keep-llvm cannot be used with --check.");
+	}
+
+	log.debug(`Project root: ${settings.projectRoot}`, settings.debug, settings.quiet);
+
+	log.debug(`Configuration directory: ${settings.configDirectory}`, settings.debug, settings.quiet);
+
+	log.debug(`Output directory: ${settings.outDir}`, settings.debug, settings.quiet);
+
+	log.debug(`Target: ${settings.target || "host default"}`, settings.debug, settings.quiet);
+
+	log.debug(`Optimization: -O${settings.optimization}`, settings.debug, settings.quiet);
+
+	log.debug(`Runtime: ${settings.runtime ? "enabled" : "disabled"}`, settings.debug, settings.quiet);
 
 	return settings;
 }
@@ -446,6 +516,7 @@ function createCompileOptions(settings: BuildSettings): CompileOptions {
 
 async function collectSourceFiles(projectRoot: string, settings: BuildSettings): Promise<SourceFile[]> {
 	const root = path.resolve(projectRoot);
+
 	const outputDirectory = path.resolve(root, settings.outDir);
 
 	const ignoredPaths = [...DEFAULT_IGNORES.map((entry) => path.resolve(root, entry)), ...settings.ignoreFiles.map((entry) => path.resolve(root, entry))];
@@ -482,6 +553,10 @@ async function collectSourceFiles(projectRoot: string, settings: BuildSettings):
 				name: path.basename(entry.name, ".lpp"),
 				source: await fs.readFile(absolutePath, "utf8"),
 			});
+
+			log.verbose(`Discovered ${absolutePath}`, settings.verbose, settings.quiet);
+
+			log.debug(`Discovered source file: ${absolutePath}`, settings.debug, settings.quiet);
 		}
 	}
 
@@ -517,12 +592,6 @@ async function loadSingleSourceFile(filePath: string): Promise<SourceFile> {
 // ============================================================
 
 function generateLLVM(typedFile: TypedSourceFile): string {
-	/*
-	 * LLVMBackend is constructed with the file's Binder.
-	 *
-	 * This uses the one-argument constructor and passes the TypedAST
-	 * to generate(), rather than passing the AST to the constructor.
-	 */
 	const backend = new LLVMBackend(typedFile.binder, typedFile.typedAST);
 
 	const llvmIR = backend.generate();
@@ -547,10 +616,8 @@ async function analyzeAndGenerateLLVM(
 
 	log.info(`Analyzing ${sourceFiles.length} source file(s).`, settings.quiet);
 
-	/*
-	 * Important: one SemanticAnalyzer for the whole project.
-	 * This lets the analyzer see the entire collection of files.
-	 */
+	log.debug("Initializing semantic analyzer.", settings.debug, settings.quiet);
+
 	const analyzer = new SemanticAnalyzer(sourceFiles);
 
 	const typedFiles = analyzer.startSemanticAnalysis(compileOptions);
@@ -559,9 +626,13 @@ async function analyzeAndGenerateLLVM(
 		throw new Error("Semantic analysis did not return a typed file for every source file.");
 	}
 
+	log.debug(`Semantic analysis produced ${typedFiles.length} typed file(s).`, settings.debug, settings.quiet);
+
 	const generatedFiles: GeneratedLLVMFile[] = [];
 
 	for (const typedFile of typedFiles) {
+		log.verbose(`Generating LLVM IR for ${typedFile.path}`, settings.verbose, settings.quiet);
+
 		const llvmIR = generateLLVM(typedFile);
 
 		const relativePath = path.relative(projectRoot, typedFile.path);
@@ -579,7 +650,7 @@ async function analyzeAndGenerateLLVM(
 			llvmPath,
 		});
 
-		log.verbose(`Generated LLVM IR: ${llvmPath}`, settings.verbose);
+		log.debug(`Generated LLVM IR: ${llvmPath}`, settings.debug, settings.quiet);
 	}
 
 	return generatedFiles;
@@ -590,18 +661,22 @@ async function analyzeAndGenerateLLVM(
 // ============================================================
 
 function findRuntimeFile(settings: BuildSettings): string | undefined {
+	// An explicitly configured runtime takes precedence.
+	// Do not silently substitute another runtime if it is missing.
+	if (settings.runtimeFile) {
+		return existsSync(settings.runtimeFile) ? settings.runtimeFile : undefined;
+	}
+
 	const cliDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 	const candidates = [
-		settings.runtimeFile,
-
 		path.resolve(settings.projectRoot, "runtime.c"),
 		path.resolve(settings.projectRoot, "runtime/runtime.c"),
 
 		path.join(cliDirectory, "runtime.c"),
 		path.join(cliDirectory, "../runtime.c"),
 		path.join(cliDirectory, "runtime/runtime.c"),
-	].filter((candidate): candidate is string => candidate !== undefined);
+	];
 
 	return candidates.find((candidate) => existsSync(candidate));
 }
@@ -645,6 +720,10 @@ function compileLLVMFiles(llvmFiles: string[], outputFile: string, settings: Bui
 		const runtimeFile = findRuntimeFile(settings);
 
 		if (!runtimeFile) {
+			if (settings.runtimeFile) {
+				throw new Error(`Configured runtime file was not found: ${settings.runtimeFile}`);
+			}
+
 			throw new Error("runtime.c was not found. Configure runtimeFile in LppConfig.jsonc or use --without-runtime.");
 		}
 
@@ -653,7 +732,11 @@ function compileLLVMFiles(llvmFiles: string[], outputFile: string, settings: Bui
 
 	args.push("-o", outputFile);
 
-	log.verbose(`clang ${args.join(" ")}`, settings.verbose);
+	const command = formatCommand("clang", args);
+
+	log.debug(command, settings.debug, settings.quiet);
+
+	log.verbose(command, settings.verbose, settings.quiet);
 
 	const result = spawnSync("clang", args, {
 		encoding: "utf8",
@@ -700,6 +783,7 @@ async function copyLLVMFiles(generatedFiles: GeneratedLLVMFile[], temporaryDirec
 
 async function buildProject(directory: string, settings: BuildSettings): Promise<void> {
 	const projectRoot = path.resolve(directory);
+
 	const stats = await fs.stat(projectRoot);
 
 	if (!stats.isDirectory()) {
@@ -707,6 +791,10 @@ async function buildProject(directory: string, settings: BuildSettings): Promise
 	}
 
 	const compileOptions = createCompileOptions(settings);
+
+	log.section("Building L++ project", settings.quiet);
+
+	log.info(`Project: ${log.path(projectRoot)}`, settings.quiet);
 
 	const sourceFiles = await collectSourceFiles(projectRoot, settings);
 
@@ -717,11 +805,14 @@ async function buildProject(directory: string, settings: BuildSettings): Promise
 	log.info(`Found ${sourceFiles.length} source file(s).`, settings.quiet);
 
 	if (settings.check) {
+		log.section("Semantic analysis", settings.quiet);
+
 		const analyzer = new SemanticAnalyzer(sourceFiles);
 
 		analyzer.startSemanticAnalysis(compileOptions);
 
 		log.success("Project check completed.", settings.quiet);
+
 		return;
 	}
 
@@ -738,10 +829,13 @@ async function buildProject(directory: string, settings: BuildSettings): Promise
 
 		if (settings.keepLLVM) {
 			await copyLLVMFiles(generatedFiles, temporaryDirectory, outputDirectory);
+
+			log.success(`LLVM files copied to ${log.path(outputDirectory)}`, settings.quiet);
 		}
 
 		if (!settings.emit) {
 			log.success("LLVM generation completed; native output was disabled.", settings.quiet);
+
 			return;
 		}
 
@@ -753,16 +847,18 @@ async function buildProject(directory: string, settings: BuildSettings): Promise
 			recursive: true,
 		});
 
+		log.section("Native compilation", settings.quiet);
+
 		compileLLVMFiles(
 			generatedFiles.map((file) => file.llvmPath),
 			executablePath,
 			settings
 		);
 
-		log.success(`Built ${executablePath}`, settings.quiet);
+		log.success(`Built ${log.path(executablePath)}`, settings.quiet);
 
 		if (settings.run) {
-			runExecutable(executablePath);
+			runExecutable(executablePath, settings);
 		}
 	} finally {
 		await fs.rm(temporaryDirectory, {
@@ -778,7 +874,12 @@ async function buildProject(directory: string, settings: BuildSettings): Promise
 
 async function compileSingleFile(filePath: string, settings: BuildSettings): Promise<void> {
 	const sourceFile = await loadSingleSourceFile(filePath);
+
 	const compileOptions = createCompileOptions(settings);
+
+	log.section("Compiling L++ source", settings.quiet);
+
+	log.info(`Source: ${log.path(sourceFile.path)}`, settings.quiet);
 
 	if (settings.check) {
 		const analyzer = new SemanticAnalyzer([sourceFile]);
@@ -786,6 +887,7 @@ async function compileSingleFile(filePath: string, settings: BuildSettings): Pro
 		analyzer.startSemanticAnalysis(compileOptions);
 
 		log.success("File check completed.", settings.quiet);
+
 		return;
 	}
 
@@ -802,10 +904,13 @@ async function compileSingleFile(filePath: string, settings: BuildSettings): Pro
 
 		if (settings.keepLLVM) {
 			await copyLLVMFiles(generatedFiles, temporaryDirectory, outputDirectory);
+
+			log.success(`LLVM files copied to ${log.path(outputDirectory)}`, settings.quiet);
 		}
 
 		if (!settings.emit) {
 			log.success("LLVM generation completed; native output was disabled.", settings.quiet);
+
 			return;
 		}
 
@@ -823,10 +928,10 @@ async function compileSingleFile(filePath: string, settings: BuildSettings): Pro
 			settings
 		);
 
-		log.success(`Compiled ${executablePath}`, settings.quiet);
+		log.success(`Compiled ${log.path(executablePath)}`, settings.quiet);
 
 		if (settings.run) {
-			runExecutable(executablePath);
+			runExecutable(executablePath, settings);
 		}
 	} finally {
 		await fs.rm(temporaryDirectory, {
@@ -842,11 +947,22 @@ async function compileSingleFile(filePath: string, settings: BuildSettings): Pro
 
 async function compileSourceToLLVM(filePath: string, settings: BuildSettings): Promise<void> {
 	const sourceFile = await loadSingleSourceFile(filePath);
+
 	const compileOptions = createCompileOptions(settings);
+
+	log.section("Generating LLVM IR", settings.quiet);
+
+	log.info(`Source: ${log.path(sourceFile.path)}`, settings.quiet);
 
 	const analyzer = new SemanticAnalyzer([sourceFile]);
 
 	const typedFiles = analyzer.startSemanticAnalysis(compileOptions);
+
+	if (settings.check) {
+		log.success("File check completed.", settings.quiet);
+
+		return;
+	}
 
 	const typedFile = typedFiles[0];
 
@@ -872,7 +988,7 @@ async function compileSourceToLLVM(filePath: string, settings: BuildSettings): P
 
 	await fs.writeFile(outputPath, llvmIR, "utf8");
 
-	log.success(`Generated ${outputPath}`, settings.quiet);
+	log.success(`Generated ${log.path(outputPath)}`, settings.quiet);
 }
 
 // ============================================================
@@ -882,6 +998,22 @@ async function compileSourceToLLVM(filePath: string, settings: BuildSettings): P
 async function compileExistingLLVM(files: string[], settings: BuildSettings): Promise<void> {
 	if (files.length === 0) {
 		throw new Error("Provide at least one .ll file.");
+	}
+
+	if (settings.check) {
+		throw new Error("--check is not supported by compileLLVM.");
+	}
+
+	if (settings.tokens || settings.ast) {
+		throw new Error("--tokens and --ast are only available for L++ source files.");
+	}
+
+	if (settings.keepLLVM) {
+		throw new Error("--keep-llvm is not applicable to existing LLVM files.");
+	}
+
+	if (!settings.emit) {
+		throw new Error("--no-emit is not supported by compileLLVM.");
 	}
 
 	const llvmFiles = files.map((file) => path.resolve(file));
@@ -923,12 +1055,14 @@ async function compileExistingLLVM(files: string[], settings: BuildSettings): Pr
 		recursive: true,
 	});
 
+	log.section("Compiling LLVM IR", settings.quiet);
+
 	compileLLVMFiles(llvmFiles, executablePath, settings);
 
-	log.success(`Compiled ${executablePath}`, settings.quiet);
+	log.success(`Compiled ${log.path(executablePath)}`, settings.quiet);
 
 	if (settings.run) {
-		runExecutable(executablePath);
+		runExecutable(executablePath, settings);
 	}
 }
 
@@ -938,6 +1072,7 @@ async function compileExistingLLVM(files: string[], settings: BuildSettings): Pr
 
 async function initializeConfig(directory: string, force: boolean): Promise<void> {
 	const projectRoot = path.resolve(directory);
+
 	const configPath = path.join(projectRoot, "LppConfig.jsonc");
 
 	await fs.mkdir(projectRoot, {
@@ -950,7 +1085,7 @@ async function initializeConfig(directory: string, force: boolean): Promise<void
 
 	await fs.writeFile(configPath, CONFIG_TEMPLATE, "utf8");
 
-	log.success(`Created ${configPath}`);
+	log.success(`Created ${log.path(configPath)}`);
 }
 
 // ============================================================
@@ -965,7 +1100,7 @@ function addCommonOptions(command: Command): Command {
 		.option("-t, --target <triple>", "LLVM target triple")
 		.option("-O, --optimization <level>", "Optimization: 0, 1, 2, 3, s, z")
 
-		.option("--debug", "Generate debug information")
+		.option("--debug", "Enable debug output and generate debug symbols")
 		.option("--tokens", "Print lexer tokens")
 		.option("--ast", "Print the AST")
 		.option("--check", "Only perform semantic analysis")
@@ -989,7 +1124,9 @@ const program = new Command();
 
 program.name("lpp").description("The L++ compiler").version(VERSION).showHelpAfterError().showSuggestionAfterError();
 
+// ============================================================
 // build <directory>
+// ============================================================
 
 const buildCommand = program.command("build <directory>").description("Build an entire L++ project");
 
@@ -1009,7 +1146,9 @@ buildCommand.action(async (directory: string) => {
 	}
 });
 
+// ============================================================
 // compile <file.lpp>
+// ============================================================
 
 const compileCommand = program.command("compile <file>").description("Compile one L++ source file");
 
@@ -1029,7 +1168,9 @@ compileCommand.action(async (file: string) => {
 	}
 });
 
+// ============================================================
 // compileToLLVM <file.lpp>
+// ============================================================
 
 const compileToLLVMCommand = program.command("compileToLLVM <file>").description("Compile one L++ source file to LLVM IR");
 
@@ -1053,7 +1194,9 @@ compileToLLVMCommand.action(async (file: string) => {
 	}
 });
 
+// ============================================================
 // compileLLVM <files...>
+// ============================================================
 
 const compileLLVMCommand = program.command("compileLLVM <files...>").description("Compile existing LLVM IR files into a native executable");
 
@@ -1069,15 +1212,7 @@ compileLLVMCommand.action(async (files: string[]) => {
 
 		const settings = await resolveSettings(path.dirname(path.resolve(firstFile)), compileLLVMCommand.opts<CLIOptions>());
 
-		if (settings.check) {
-			throw new Error("--check is not supported by compileLLVM.");
-		}
-
-		compileExistingLLVM(files, settings).catch((error: unknown) => {
-			log.error(error instanceof Error ? error.message : String(error));
-
-			process.exitCode = 1;
-		});
+		await compileExistingLLVM(files, settings);
 	} catch (error) {
 		log.error(error instanceof Error ? error.message : String(error));
 
@@ -1085,7 +1220,9 @@ compileLLVMCommand.action(async (files: string[]) => {
 	}
 });
 
+// ============================================================
 // init-config [directory]
+// ============================================================
 
 program
 	.command("init-config [directory]")

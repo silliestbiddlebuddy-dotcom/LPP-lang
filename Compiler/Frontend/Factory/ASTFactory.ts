@@ -1,6 +1,7 @@
 import { isAssignmentOperator } from "../Parser/ASTGuards.ts";
-import type { AccessModifier, generalModifier, Modifier } from "../Lexer/Lexer.types.ts";
+import type { AccessModifier, generalModifier, Span, Modifier } from "../Lexer/Lexer.types.ts";
 import {
+	NodeKind,
 	ParserError,
 	type Argument,
 	type ArrayLiteralExpression,
@@ -50,11 +51,12 @@ import {
 	type WhileStatement,
 } from "../Parser/Parser.types.ts";
 
-export function createProgram(name: string): Program {
+export function createProgram(name: string, text: string): Program {
 	return {
-		type: "Program",
+		type: NodeKind.Program,
 		name: name,
 		body: [],
+		text,
 	};
 }
 export function createVariableDeclaration(
@@ -63,89 +65,113 @@ export function createVariableDeclaration(
 	name: string,
 	type: Type,
 	initializer: Expression,
-	generalModifiers: generalModifier[]
+	generalModifiers: generalModifier[],
+	text: string,
+	position: Span
 ): VariableDeclaration {
 	return {
-		type: "VariableDeclaration",
+		type: NodeKind.VariableDeclaration,
 		generalModifiers: generalModifiers,
 		scope: scope,
 		constant: constant,
 		variableType: type,
 		initializer: initializer,
 		name: name,
+		text,
+		position,
 	};
 }
-export function createNumberLiteral(value: number): NumberLiteral {
+export function createNumberLiteral(value: number, text: string, position: Span): NumberLiteral {
 	return {
-		type: "NumberLiteral",
+		type: NodeKind.NumberLiteral,
 		value,
+		text,
+		position,
 	};
 }
-export function createStringLiteral(value: string): StringLiteral {
+export function createStringLiteral(value: string, text: string, position: Span): StringLiteral {
 	return {
-		type: "StringLiteral",
+		type: NodeKind.StringLiteral,
 		value,
+		text,
+		position,
 	};
 }
-export function createTypeReference(identifier: Identifier, generics: Type[], optional: boolean): TypeReference {
+export function createTypeReference(identifier: Identifier, generics: Type[], optional: boolean, text: string, position: Span): TypeReference {
 	return {
-		type: "TypeReference",
+		type: NodeKind.TypeReference,
 		identifier: identifier,
 		genericTypes: generics,
 		optional: optional,
+		text,
+		position,
 	};
 }
-export function createBooleanLiteral(value: string): BooleanLiteral {
+export function createBooleanLiteral(value: string, text: string, position: Span): BooleanLiteral {
 	return {
-		type: "BooleanLiteral",
+		type: NodeKind.BooleanLiteral,
 		value: Boolean(value),
+		text,
+		position,
 	};
 }
 
-export function createIdentifier(value: string): Identifier {
+export function createIdentifier(value: string, text: string, position: Span): Identifier {
 	return {
-		type: "Identifier",
+		type: NodeKind.Identifier,
 		value,
+		text,
+		position,
 	};
 }
 
-export function createBinaryExpression(left: Expression, operator: BinaryOperator, right: Expression): BinaryExpression {
+export function createBinaryExpression(left: Expression, operator: BinaryOperator, right: Expression, text: string, position: Span): BinaryExpression {
 	return {
-		type: "BinaryExpression",
+		type: NodeKind.BinaryExpression,
 		left,
 		operator,
 		right,
+		text,
+		position,
 	};
 }
-export function createPostfixUnaryExpression(operator: PostfixUnaryOperator, value: Expression): PostfixUnaryExpression {
+export function createPostfixUnaryExpression(operator: PostfixUnaryOperator, value: Expression, text: string, position: Span): PostfixUnaryExpression {
 	return {
-		type: "PostfixUnaryExpression",
+		type: NodeKind.PostfixUnaryExpression,
 		operator: operator,
 		value: value,
+		text,
+		position,
 	};
 }
-export function createPrefixUnaryExpression(operator: PrefixUnaryOperator, value: Expression): PrefixUnaryExpression {
+export function createPrefixUnaryExpression(operator: PrefixUnaryOperator, value: Expression, text: string, position: Span): PrefixUnaryExpression {
 	return {
-		type: "PrefixUnaryExpression",
+		type: NodeKind.PrefixUnaryExpression,
 		operator: operator,
 		value: value,
+		text,
+		position,
 	};
 }
-export function createBlock(body: Node[]): Block {
+export function createBlock(body: Node[], text: string, position: Span): Block {
 	return {
-		type: "Block",
+		type: NodeKind.Block,
 		body: body,
+		text,
+		position,
 	};
 }
-export function createParameter(name: string, type: Type): Parameter {
+export function createParameter(name: Identifier, type: Type, text: string, position: Span): Parameter {
 	return {
-		type: "Parameter",
-		name: createIdentifier(name),
+		type: NodeKind.Parameter,
+		name,
 		parameterType: type,
+		text,
+		position,
 	};
 }
 export function createFunctionDeclaration(
-	name: string,
+	name: Identifier,
 	returnType: Type,
 	modifiers: Modifier[],
 	parameters: Parameter[],
@@ -153,172 +179,225 @@ export function createFunctionDeclaration(
 	body: Block,
 	generalModifiers: generalModifier[],
 	genericParameters: GenericParameter[],
+	text: string,
+	position: Span,
 	accessModifier?: AccessModifier
 ): FunctionDeclaration {
 	return {
-		type: "FunctionDeclaration",
+		type: NodeKind.FunctionDeclaration,
 		generalModifiers: generalModifiers,
 		returnType: returnType,
-		name: createIdentifier(name),
+		name: name,
 		body: body,
 		modifiers: modifiers,
 		parameters: parameters,
 		accessModifier: accessModifier,
 		genericParameters: genericParameters,
+		text,
+		position,
 	};
 }
-export function createIfStatement(body: Block, condition: Expression, elseifs?: ElseifStatement[], elseBlock?: Block): IfStatement {
+export function createIfStatement(body: Block, condition: Expression, text: string, position: Span, elseifs?: ElseifStatement[], elseBlock?: Block): IfStatement {
 	return {
-		type: "IfStatement",
+		type: NodeKind.IfStatement,
 		body: body,
 		condition: condition,
 		elseIfs: elseifs || [],
 		else: elseBlock || null,
+		text,
+		position,
 	};
 }
-export function createElseifStatement(body: Block, condition: Expression): ElseifStatement {
+export function createElseifStatement(body: Block, condition: Expression, text: string, position: Span): ElseifStatement {
 	return {
-		type: "ElseifStatement",
+		type: NodeKind.ElseifStatement,
 		body: body,
 		condition: condition,
+		text,
+		position,
 	};
 }
-export function createTypeAliasDeclaration(alias: string, value: Type, parameters: GenericParameter[], generalModifiers: generalModifier[]): TypeAliasDeclaration {
+export function createTypeAliasDeclaration(
+	alias: string,
+	value: Type,
+	parameters: GenericParameter[],
+	generalModifiers: generalModifier[],
+	text: string,
+	position: Span
+): TypeAliasDeclaration {
 	return {
-		type: "TypeAliasDeclaration",
+		type: NodeKind.TypeAliasDeclaration,
 		generalModifiers: generalModifiers,
 		alias: alias,
 		value: value,
 		parameters: parameters,
+		text,
+		position,
 	};
 }
-export function createReturnStatement(expression: Expression): ReturnStatement {
+export function createReturnStatement(expression: Expression, text: string, position: Span): ReturnStatement {
 	return {
-		type: "ReturnStatement",
+		type: NodeKind.ReturnStatement,
 		expression: expression,
+		text,
+		position,
 	};
 }
-export function createContinueStatement(): ContinueStatement {
+export function createContinueStatement(text: string, position: Span): ContinueStatement {
 	return {
-		type: "ContinueStatement",
+		type: NodeKind.ContinueStatement,
+		text,
+		position,
 	};
 }
-export function createBreakStatement(): BreakStatement {
+export function createBreakStatement(text: string, position: Span): BreakStatement {
 	return {
-		type: "BreakStatement",
+		type: NodeKind.BreakStatement,
+		text,
+		position,
 	};
 }
 
-export function createMemberAccessExpression(object: Expression, member: Identifier): MemberAccessExpression {
+export function createMemberAccessExpression(object: Expression, member: Identifier, text: string, position: Span): MemberAccessExpression {
 	return {
-		type: "MemberAccessExpression",
+		type: NodeKind.MemberAccessExpression,
 		object: object,
 		member: member,
+		text,
+		position,
 	};
 }
-export function createArgument(value: Expression): Argument {
+export function createArgument(value: Expression, text: string, position: Span): Argument {
 	return {
-		type: "Argument",
+		type: NodeKind.Argument,
 		value: value,
+		text,
+		position,
 	};
 }
-export function createFunctionCallExpression(callee: Expression, argumentArray: Argument[]): FunctionCallExpression {
+export function createFunctionCallExpression(callee: Expression, argumentArray: Argument[], text: string, position: Span): FunctionCallExpression {
 	return {
-		type: "FunctionCallExpression",
+		type: NodeKind.FunctionCallExpression,
 		callee: callee,
 		arguments: argumentArray,
+		text,
+		position,
 	};
 }
-export function createIndexExpression(object: Expression, index: Expression): IndexExpression {
+export function createIndexExpression(object: Expression, index: Expression, text: string, position: Span): IndexExpression {
 	return {
-		type: "IndexExpression",
+		type: NodeKind.IndexExpression,
 		object: object,
 		index: index,
+		text,
+		position,
 	};
 }
-export function createArrayLiteralExpression(elements: Expression[]): ArrayLiteralExpression {
+export function createArrayLiteralExpression(elements: Expression[], text: string, position: Span): ArrayLiteralExpression {
 	return {
-		type: "ArrayLiteralExpression",
+		type: NodeKind.ArrayLiteralExpression,
 		elements: elements,
+		text,
+		position,
 	};
 }
-export function createWhileStatement(body: Block, condition: Expression): WhileStatement {
+export function createWhileStatement(body: Block, condition: Expression, text: string, position: Span): WhileStatement {
 	return {
-		type: "WhileStatement",
+		type: NodeKind.WhileStatement,
 		body: body,
 		condition: condition,
+		text,
+		position,
 	};
 }
-export function createAssignmentStatement(target: Expression, operator: AssignmentOperator, value: Expression): AssignmentStatement {
+export function createAssignmentStatement(target: Expression, operator: AssignmentOperator, value: Expression, text: string, position: Span): AssignmentStatement {
 	if (isAssignmentOperator(operator)) {
 		return {
-			type: "AssignmentStatement",
+			type: NodeKind.AssignmentStatement,
 			target: target,
 			operator: operator,
 			value: value,
+			text,
+			position,
 		};
 	}
 	throw new ParserError("expected an assignment operator but got " + operator);
 }
-export function createForStatement(initializer: VariableDeclaration, condition: Expression, update: AssignmentStatement, body: Block): ForStatement {
+export function createForStatement(initializer: VariableDeclaration, condition: Expression, update: AssignmentStatement, body: Block, text: string, position: Span): ForStatement {
 	return {
-		type: "ForStatement",
+		type: NodeKind.ForStatement,
 		initializer: initializer,
 		condition: condition,
 		update: update,
 		body: body,
+		text,
+		position,
 	};
 }
 export function createUserDefinedTypeDeclaration(
 	identifier: string,
 	parameters: GenericParameter[],
 	properties: Property[],
-	generalModifiers: generalModifier[]
+	generalModifiers: generalModifier[],
+	text: string,
+	position: Span
 ): UserDefinedTypeDeclaration {
 	return {
 		identifier: identifier,
-		type: "UserDefinedTypeDeclaration",
+		type: NodeKind.UserDefinedTypeDeclaration,
 		generalModifiers: generalModifiers,
 		genericTypeParameters: parameters,
 		properties: properties,
+		text,
+		position,
 	};
 }
-export function createGenericParameter(identifier: string, type: Type): GenericParameter {
+export function createGenericParameter(identifier: string, type: Type, text: string, position: Span): GenericParameter {
 	return {
-		type: "GenericParameter",
+		type: NodeKind.GenericParameter,
 		identifier: identifier,
 		value: type,
+		text,
+		position,
 	};
 }
-export function createProperty(identifier: string, type: Type, modifiers: Modifier[], accessModifier?: AccessModifier): Property {
+export function createProperty(identifier: string, type: Type, modifiers: Modifier[], text: string, position: Span, accessModifier?: AccessModifier): Property {
 	return {
-		type: "Property",
+		type: NodeKind.Property,
 		identifier: identifier,
 		propertyType: type,
 		accessModifier: accessModifier,
 		modifiers: modifiers,
+		text,
+		position,
 	};
 }
 
-export function createAssertionExpression(value: Expression, target: Type): AssertionExpression {
+export function createAssertionExpression(value: Expression, target: Type, text: string, position: Span): AssertionExpression {
 	return {
-		type: "AssertionExpression",
+		type: NodeKind.AssertionExpression,
 		value: value,
 		target: target,
+		text,
+		position,
 	};
 }
-export function createUnionType(left: Type, right: Type): UnionType {
+export function createUnionType(left: Type, right: Type, text: string, position: Span): UnionType {
 	return {
-		type: "UnionType",
+		type: NodeKind.UnionType,
 		typeA: left,
 		typeB: right,
+		text,
+		position,
 	};
 }
-export function createIntersectionType(left: Type, right: Type): IntersectionType {
+export function createIntersectionType(left: Type, right: Type, text: string, position: Span): IntersectionType {
 	return {
-		type: "IntersectionType",
+		type: NodeKind.IntersectionType,
 		typeA: left,
 		typeB: right,
+		text,
+		position,
 	};
 }
 export function createClassDeclaration(
@@ -331,16 +410,20 @@ export function createClassDeclaration(
 	hierarchy: {
 		extends: Type[];
 		implements: Type[];
-	}
+	},
+	text: string,
+	position: Span
 ): ClassDeclaration {
 	return {
-		type: "ClassDeclaration",
+		type: NodeKind.ClassDeclaration,
 		generalModifiers: generalModifiers,
 		genericTypeParameters: genericTypeParameters,
 		identifier: identifier,
 		properties: properties,
 		methods: methods,
 		hierarchy: hierarchy,
+		text,
+		position,
 	};
 }
 export function createInterfaceDeclaration(
@@ -352,37 +435,47 @@ export function createInterfaceDeclaration(
 	hierarchy: {
 		extends: Type[];
 		implements: Type[];
-	}
+	},
+	text: string,
+	position: Span
 ): InterfaceDeclaration {
 	return {
-		type: "InterfaceDeclaration",
+		type: NodeKind.InterfaceDeclaration,
 		generalModifiers: generalModifiers,
 		genericTypeParameters: genericTypeParameters,
 		identifier: identifier,
 		properties: properties,
 		hierarchy: hierarchy,
+		text,
+		position,
 	};
 }
-export function createFunctionType(parameters: Parameter[], genericParameters: GenericParameter[], returnType: Type): FunctionType {
+export function createFunctionType(parameters: Parameter[], genericParameters: GenericParameter[], returnType: Type, text: string, position: Span): FunctionType {
 	return {
-		type: "FunctionType",
+		type: NodeKind.FunctionType,
 		parameters: parameters,
 		genericParameters: genericParameters,
 		returnType: returnType,
+		text,
+		position,
 	};
 }
 
-export function createObjectExpression(properties: Property[]): ObjectExpression {
+export function createObjectExpression(properties: Property[], text: string, position: Span): ObjectExpression {
 	return {
-		type: "ObjectExpression",
+		type: NodeKind.ObjectExpression,
 		properties: properties,
+		text,
+		position,
 	};
 }
 
-export function createConstructorExpression(classExpr: Expression, argumentsArray: Argument[]): ConstructorExpression {
+export function createConstructorExpression(classExpr: Expression, argumentsArray: Argument[], text: string, position: Span): ConstructorExpression {
 	return {
-		type: "ConstructorExpression",
+		type: NodeKind.ConstructorExpression,
 		arguments: argumentsArray,
 		class: classExpr,
+		text,
+		position,
 	};
 }

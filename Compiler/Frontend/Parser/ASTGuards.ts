@@ -1,6 +1,7 @@
 import { isConstKeyword } from "typescript/unstable/ast";
-import { type Identifier, type Node } from "./Parser.types.ts";
+import { declarationsTypes, NodeKind, type DeclarationUnion, type Identifier, type Import, type Node, type NodeUnion } from "./Parser.types.ts";
 import type { Token } from "../Lexer/Lexer.types.ts";
+import { findNodeAtOffset } from "jsonc-parser";
 /*export function isIdentifier(node: Node): node is Identifier {
 	if (node.type === "Identifier") return true;
 	return false;
@@ -73,4 +74,17 @@ export function isAssignmentOperator(operator: string): boolean {
 }
 export function isExtendsOrImplementsToken(token: Token): boolean {
 	return token.type === "ReservedExtends" || token.type === "ReservedImplements";
+}
+export function isImport(node: NodeUnion): node is Import {
+	return node.type === NodeKind.ImportSourceStatement || node.type === NodeKind.ImportStdlibStatement;
+}
+export function isDeclaration(node: NodeUnion): node is DeclarationUnion {
+	return declarationsTypes.includes(node.type);
+}
+export function isExportedDeclaration(node: NodeUnion): node is DeclarationUnion {
+	if (!isDeclaration(node)) return false;
+	return node.generalModifiers.includes("export");
+}
+export function isToken(object: Token | Node): object is Token {
+	return Object.hasOwn(object, "value");
 }

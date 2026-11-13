@@ -1,4 +1,4 @@
-import type { AccessModifier, generalModifier, Modifier, Token, TokenType } from "../Lexer/Lexer.types.ts";
+import { Token, type AccessModifier, type generalModifier, type Span, type Modifier, type TokenType } from "../Lexer/Lexer.types.ts";
 import {
 	type Argument,
 	type ArrayLiteralExpression,
@@ -43,6 +43,7 @@ import {
 	type ConstructorExpression,
 	type ImportSourceStatement,
 	type ImportStdlibStatement,
+	NodeKind,
 } from "./Parser.types.ts";
 
 import {
@@ -113,6 +114,7 @@ import {
 	isPostfixUnaryOperator,
 	isPrefixUnaryOperator,
 	isReturnKeyword,
+	isToken,
 	isTypeKeyword,
 	isTypeOperator,
 	isWhileKeyword,
@@ -125,10 +127,10 @@ export class Parser {
 	private tokens: Token[];
 	private AST: ASTType;
 	private pointer: number;
-	constructor(tokens: Token[], programName: string) {
+	constructor(tokens: Token[], programName: string, text: string) {
 		this.pointer = 0;
 		this.tokens = tokens;
-		this.AST = [createProgram(programName)];
+		this.AST = [createProgram(programName, text)];
 	}
 	// ─────────────────────────────────────────────
 	// Program
@@ -169,7 +171,7 @@ export class Parser {
 				return val;
 			}
 			if (this.peek().value === ";") this.expect("Symbol", ";", "Expected statement terminator `;`");
-			if (expression.type !== "FunctionCallExpression") throw new LPPSyntaxError("Expression statements aren't allowed, onlly function calls are.");
+			if (expression.type !== NodeKind.FunctionCallExpression) throw new LPPSyntaxError("Expression statements aren't allowed, onlly function calls are.");
 			return expression;
 		} else if (isForKeyword(currentToken)) {
 			const val = this.parseForStatement();
@@ -212,10 +214,6 @@ export class Parser {
 				return val;
 			} else throw new LPPSyntaxError("Expected a declaration or a statement.");
 		}
-
-		/*if (isConstKeyword(currentToken) || isLocalKeyword(currentToken) || isGlobalKeyword(currentToken)) {
-			return this.parseVariableDeclaration();
-		}*/
 	}
 	private parseGeneralModifiers(): generalModifier[] {
 		const modifiers: generalModifier[] = [];
@@ -228,7 +226,8 @@ export class Parser {
 	private parseIdentifierList(until?: string): Identifier[] {
 		const identifiers: Identifier[] = [];
 		while (this.peek().type === "Identifier" && this.peek().value !== until) {
-			identifiers.push(this.consume() as Identifier);
+			const identifier = this.consume();
+			identifiers.push(createIdentifier(identifier.value, this.getText(identifier), this.getSpan(identifier)));
 			if (this.peek().type === "Symbol" && this.peek().value === ",") {
 				this.consume();
 				continue;
@@ -236,16 +235,17 @@ export class Parser {
 		}
 		return identifiers;
 	}
-	private parseBlock(endTokenType: TokenType, value: string): Block {
-		const block = createBlock([]);
+	private parseBlock(startToken: Token, endTokenType: TokenType, value: string): Block {
+		const body: Node[] = [];
 		while (this.peek().type !== endTokenType && this.peek().value !== value) {
 			if (this.peek().type === "EOF") {
 				throw new LPPSyntaxError(`Expected ${endTokenType} but reached EOF`);
 			}
 			const node = this.parseStatement();
-			block.body.push(node);
+			body.push(node);
 		}
-		if (this.peek().value === ";") this.expect("Symbol", ";", "Expected statement terminator `;`");
+
+		const block = createBlock(body, this.getText(startToken), this.getSpan(startToken, this.peek()));
 		return block;
 	}
 	private parseObject(endTokenType: TokenType, value: string): Property[] {
@@ -262,55 +262,61 @@ export class Parser {
 		}
 		return properties;
 	}
-	private parseElseifStatement(): ElseifStatement {
-		this.expect("ReservedElseif");
+	private parseElseifStatement(): { statement: ElseifStatement; closingBracket: Token } {
+		const elseifKeyword = this.expect("ReservedElseif");
 		const condition = this.parseExpression();
 		this.expect("ReservedDo");
-		this.expect("Symbol", "{");
-		const body = this.parseBlock("Symbol", "}");
-		this.expect("Symbol", "}");
-		return createElseifStatement(body, condition);
+		const openingCurlyBracket = this.expect("Symbol", "{");
+		const body = this.parseBlock(openingCurlyBracket, "Symbol", "}");
+		const closingCurlyBracket = this.expect("Symbol", "}");
+		return {
+			statement: createElseifStatement(body, condition, this.getText(elseifKeyword), this.getSpan(elseifKeyword, closingCurlyBracket)),
+			closingBracket: closingCurlyBracket,
+		};
 	}
 	private parseIfStatement(): IfStatement {
-		this.expect("ReservedIf");
+		const ifKeyword = this.expect("ReservedIf");
 		const condition = this.parseExpression();
 		this.expect("ReservedDo");
-		this.expect("Symbol", "{");
-		const body = this.parseBlock("Symbol", "}");
-		this.expect("Symbol", "}");
+		const openingCurlyBracket = this.expect("Symbol", "{");
+		const body = this.parseBlock(openingCurlyBracket, "Symbol", "}");
+		let closingCurlyBracket = this.expect("Symbol", "}");
 		const elseifs: ElseifStatement[] = [];
 		while (this.peek().type === "ReservedElseif") {
-			elseifs.push(this.parseElseifStatement());
+			const elseifStatement = this.parseElseifStatement();
+			closingCurlyBracket = elseifStatement.closingBracket;
+			elseifs.push(elseifStatement.statement);
 		}
 		let elseBlock = undefined;
 		if (this.peek().type === "ReservedElse") {
 			this.consume();
-			this.expect("Symbol", "{");
-			elseBlock = this.parseBlock("Symbol", "}");
-			this.expect("Symbol", "}");
+			const openingCurlyBracket = this.expect("Symbol", "{");
+			elseBlock = this.parseBlock(openingCurlyBracket, "Symbol", "}");
+			closingCurlyBracket = this.expect("Symbol", "}");
 		}
-		return createIfStatement(body, condition, elseifs, elseBlock);
+		return createIfStatement(body, condition, this.getText(ifKeyword), this.getSpan(ifKeyword, closingCurlyBracket), elseifs, elseBlock);
 	}
 	private parseWhileStatement(): WhileStatement {
-		this.expect("ReservedWhile");
+		const whileKeyword = this.expect("ReservedWhile");
 		const condition = this.parseExpression();
 		this.expect("ReservedDo");
-		this.expect("Symbol", "{");
-		const body = this.parseBlock("Symbol", "}");
-		this.expect("Symbol", "}");
-		return createWhileStatement(body, condition);
+		const openingCurlyBracket = this.expect("Symbol", "{");
+		const body = this.parseBlock(openingCurlyBracket, "Symbol", "}");
+		const closingCurlyBracket = this.expect("Symbol", "}");
+		return createWhileStatement(body, condition, this.getText(whileKeyword), this.getSpan(whileKeyword, closingCurlyBracket));
 	}
 	private parseReturnStatement(): ReturnStatement {
 		this.expect("ReservedReturn");
-		return createReturnStatement(this.parseExpression());
+		const expression = this.parseExpression();
+		return createReturnStatement(expression, this.getText(expression), this.getSpan(expression));
 	}
 	private parseAssignmentStatement(target: Expression = this.parseExpression()): AssignmentStatement {
 		const operator = this.expect("Symbol");
 		const value = this.parseExpression();
-		return createAssignmentStatement(target, operator.value as AssignmentOperator, value);
+		return createAssignmentStatement(target, operator.value as AssignmentOperator, value, this.getText(target, operator, value), this.getSpan(target, operator, value));
 	}
 	private parseForStatement(): ForStatement {
-		this.expect("ReservedFor");
+		const forKeyword = this.expect("ReservedFor");
 		this.expect("Symbol", "(");
 		const initializer = this.parseVariableDeclaration([]);
 		this.expect("Symbol", ";");
@@ -319,41 +325,45 @@ export class Parser {
 		const update = this.parseAssignmentStatement();
 		this.expect("Symbol", ")");
 		this.expect("ReservedDo");
-		this.expect("Symbol", "{");
-		const body = this.parseBlock("Symbol", "}");
-		this.expect("Symbol", "}");
-		return createForStatement(initializer, condition, update, body);
+		const openingCurlyBracket = this.expect("Symbol", "{");
+		const body = this.parseBlock(openingCurlyBracket, "Symbol", "}");
+		const closingCurlyBracket = this.expect("Symbol", "}");
+		return createForStatement(initializer, condition, update, body, this.getText(forKeyword), this.getSpan(forKeyword, closingCurlyBracket));
 	}
 	private parseContinueStatement(): ContinueStatement {
-		this.expect("ReservedContinue");
-		return createContinueStatement();
+		const token = this.expect("ReservedContinue");
+		return createContinueStatement("continue", this.getSpan(token));
 	}
 	private parseBreakStatement(): BreakStatement {
-		this.expect("ReservedBreak");
-		return createBreakStatement();
+		const token = this.expect("ReservedBreak");
+		return createBreakStatement("break", this.getSpan(token));
 	}
 	private parseImportStatement(): ImportSourceStatement | ImportStdlibStatement {
-		this.consume();
+		const importToken = this.consume();
 		const imports = this.parseIdentifierList("from");
 		if (imports.length === 0) throw new LPPSyntaxError("Missing imports from an import statement.");
-		this.expect("Identifier", "from", "Missing `from` after import specifiers");
+		const fromToken = this.expect("Identifier", "from", "Missing `from` after import specifiers");
 		if (this.peek().type === "String") {
-			const source = this.consume().value;
-			if (source.length === 0) throw new LPPSyntaxError("Expected a source file");
+			const source = this.consume();
+			if (source.value.length === 0) throw new LPPSyntaxError("Expected a source file");
 			return {
-				type: "ImportSourceStatement",
-				source: source,
+				type: NodeKind.ImportSourceStatement,
+				source: source.value,
 				imports: imports,
+				text: this.getText(importToken, ...imports, fromToken, source),
+				position: this.getSpan(importToken, ...imports, fromToken, source),
 			};
 		} else {
-			this.expect("Symbol", "<", "Expected opening `<` to import an stdlib.");
+			const openingAngleBracket = this.expect("Symbol", "<", "Expected opening `<` to import an stdlib.");
 			const stdlib = this.expect("Identifier", "all", "Expected an stdlib");
 
-			this.expect("Symbol", ">", "Expected closing `>` to close the opening `<`.");
+			const closingAngleBracket = this.expect("Symbol", ">", "Expected closing `>` to close the opening `<`.");
 			return {
-				type: "ImportStdlibStatement",
+				type: NodeKind.ImportStdlibStatement,
 				stdlib: stdlib.value,
 				imports: imports,
+				text: this.getText(importToken, ...imports, fromToken, openingAngleBracket, stdlib, closingAngleBracket),
+				position: this.getSpan(importToken, ...imports, fromToken, openingAngleBracket, stdlib, closingAngleBracket),
 			};
 		}
 	}
@@ -362,14 +372,15 @@ export class Parser {
 	// ─────────────────────────────────────────────
 
 	private parseParameter(): Parameter {
-		const name = this.expect("Identifier").value;
-		this.expect("Symbol", ":", "Expected a type annotation");
+		const name = this.expect("Identifier");
+		const colon = this.expect("Symbol", ":", "Expected a type annotation");
 		const type = this.parseType();
-		return createParameter(name, type);
+		return createParameter(createIdentifier(name.value, name.value, this.getSpan(name)), type, this.getText(name, colon, type), this.getSpan(name, colon, type));
 	}
 	private parseProperty(needsAccessModifier: boolean = false): Property {
 		const currentToken = this.peek();
 		const modifiers: Modifier[] = [];
+		const tokenModifiers: Token[] = [];
 		let accessModifier;
 		if (isAccessModifier(currentToken)) {
 			accessModifier = currentToken;
@@ -379,20 +390,23 @@ export class Parser {
 			throw new LPPSyntaxError("expect an access modifier ");
 		}
 		while (isModifier(this.peek())) {
-			modifiers.push(this.consume().value as Modifier);
+			const modifier = this.consume();
+			tokenModifiers.push(modifier);
+			modifiers.push(modifier.value as Modifier);
 		}
 		const identifier = this.expect("Identifier");
-		this.expect("Symbol", ":", "expected a type annotation");
+		const colon = this.expect("Symbol", ":", "expected a type annotation");
 		const type = this.parseType();
+		const args = [accessModifier, ...tokenModifiers, identifier, colon, type].filter((arg) => arg !== null) as (Token | Node)[];
 
-		return createProperty(identifier.value, type, modifiers, accessModifier?.value as AccessModifier);
+		return createProperty(identifier.value, type, modifiers, this.getText(...args), this.getSpan(...args), accessModifier?.value as AccessModifier);
 	}
 	private parseBareProperty(modifiers: Modifier[], accessModifier: AccessModifier): Property {
 		const identifier = this.expect("Identifier");
-		this.expect("Symbol", ":", "expected a type annotation");
+		const colon = this.expect("Symbol", ":", "expected a type annotation");
 		const type = this.parseType();
 		if (this.peek().value === ";") this.expect("Symbol", ";");
-		return createProperty(identifier.value, type, modifiers, accessModifier);
+		return createProperty(identifier.value, type, modifiers, this.getText(identifier, colon, type), this.getSpan(identifier, colon, type), accessModifier);
 	}
 	private parseExtends(): Type {
 		this.expect("ReservedExtends", "all", "expected `extends` keyword");
@@ -405,6 +419,7 @@ export class Parser {
 	private parseFunctionDeclaration(generalModifiers: generalModifier[], needsAccessModifier: boolean = false): FunctionDeclaration {
 		const currentToken = this.peek();
 		const modifiers: Modifier[] = [];
+		const tokenModifiers: Token[] = [];
 		const parameters: Parameter[] = [];
 		const genericParameters: GenericParameter[] = [];
 
@@ -419,12 +434,16 @@ export class Parser {
 			throw new LPPSyntaxError("expect an access modifier ");
 		}
 		while (isModifier(this.peek())) {
-			modifiers.push(this.consume().value as Modifier);
+			const modifier = this.consume();
+			tokenModifiers.push(modifier);
+			modifiers.push(modifier.value as Modifier);
 		}
 		this.expect("ReservedFunction");
-		const name = this.expect("Identifier").value;
+		const name = this.expect("Identifier");
+		let openingAngleBracket: Token | null;
+		let closingAngleBracket: Token | null;
 		if (this.peek().type === "Symbol" && this.peek().value === "<") {
-			this.expect("Symbol", "<");
+			openingAngleBracket = this.expect("Symbol", "<");
 			while (!(this.peek().type === "Symbol" && this.peek().value === ">")) {
 				genericParameters.push(this.parseGenericParameter());
 
@@ -435,9 +454,13 @@ export class Parser {
 				}
 			}
 
-			this.expect("Symbol", ">");
+			closingAngleBracket = this.expect("Symbol", ">");
+		} else {
+			openingAngleBracket = null;
+			closingAngleBracket = null;
 		}
-		this.expect("Symbol", "(");
+
+		const openingParen = this.expect("Symbol", "(");
 		while (this.peek().value !== ")") {
 			parameters.push(this.parseParameter());
 			if (this.peek().value === ",") {
@@ -446,23 +469,57 @@ export class Parser {
 				throw new LPPSyntaxError("expected `,` or `)` but got " + this.peek().value);
 			}
 		}
-		this.expect("Symbol", ")");
-		this.expect("Symbol", ":", "expected a type annotation after function declaration");
+		const closingParen = this.expect("Symbol", ")");
+		const colon = this.expect("Symbol", ":", "expected a type annotation after function declaration");
 		type = this.parseType();
-		this.expect("Symbol", "{");
-		const body: Block = this.parseBlock("Symbol", "}");
-		this.expect("Symbol", "}");
-
-		return createFunctionDeclaration(name, type, modifiers, parameters, body, generalModifiers, genericParameters, accessModifier?.value as AccessModifier);
+		const openingCurlyBracket = this.expect("Symbol", "{");
+		const body: Block = this.parseBlock(openingCurlyBracket, "Symbol", "}");
+		const closingCurlyBracket = this.expect("Symbol", "}");
+		const args = [
+			...(accessModifier ? [accessModifier] : []),
+			...tokenModifiers,
+			this.expect("ReservedFunction"),
+			this.expect("Identifier"),
+			openingAngleBracket,
+			...(genericParameters.length > 0 ? genericParameters : []),
+			closingAngleBracket,
+			openingParen,
+			...parameters,
+			closingParen,
+			type,
+			openingCurlyBracket,
+			body,
+			closingCurlyBracket,
+		].filter((arg) => arg != null) as (Token | Node)[];
+		return createFunctionDeclaration(
+			createIdentifier(name.value, name.value, this.getSpan(name)),
+			type,
+			modifiers,
+			parameters,
+			body,
+			generalModifiers,
+			genericParameters,
+			this.getText(...args),
+			this.getSpan(...args),
+			accessModifier?.value as AccessModifier
+		);
 	}
-	private parseBareFunctionDeclaration(generalModifiers: generalModifier[], modifiers: Modifier[], accessModifier?: AccessModifier): FunctionDeclaration {
+	private parseBareFunctionDeclaration(
+		generalModifiers: generalModifier[],
+		modifiers: Modifier[],
+		tokenModifiers: Token[],
+		accessModifier?: AccessModifier
+	): FunctionDeclaration {
 		let type: Type;
 		const parameters: Parameter[] = [];
 		const genericParameters: GenericParameter[] = [];
 		this.expect("ReservedFunction");
-		const name = this.expect("Identifier").value;
+		const name = this.expect("Identifier");
+
+		let openingAngleBracket: Token | null;
+		let closingAngleBracket: Token | null;
 		if (this.peek().type === "Symbol" && this.peek().value === "<") {
-			this.expect("Symbol", "<");
+			openingAngleBracket = this.expect("Symbol", "<");
 			while (!(this.peek().type === "Symbol" && this.peek().value === ">")) {
 				genericParameters.push(this.parseGenericParameter());
 
@@ -473,9 +530,13 @@ export class Parser {
 				}
 			}
 
-			this.expect("Symbol", ">");
+			closingAngleBracket = this.expect("Symbol", ">");
+		} else {
+			openingAngleBracket = null;
+			closingAngleBracket = null;
 		}
-		this.expect("Symbol", "(");
+
+		const openingParen = this.expect("Symbol", "(");
 		while (this.peek().value !== ")") {
 			parameters.push(this.parseParameter());
 			if (this.peek().value === ",") {
@@ -484,21 +545,50 @@ export class Parser {
 				throw new LPPSyntaxError("expected `,` or `)` but got " + this.peek().value);
 			}
 		}
-		this.expect("Symbol", ")");
-		this.expect("Symbol", ":", "expected a type annotation after function declaration");
+		const closingParen = this.expect("Symbol", ")");
+		const colon = this.expect("Symbol", ":", "expected a type annotation after function declaration");
 		type = this.parseType();
-		this.expect("Symbol", "{");
-		const body: Block = this.parseBlock("Symbol", "}");
-		this.expect("Symbol", "}");
+		const openingCurlyBracket = this.expect("Symbol", "{");
+		const body: Block = this.parseBlock(openingCurlyBracket, "Symbol", "}");
+		const closingCurlyBracket = this.expect("Symbol", "}");
 		if (this.peek().value === ";") this.expect("Symbol", ";", "Expected statement terminator `;`");
-		return createFunctionDeclaration(name, type, modifiers, parameters, body, generalModifiers, genericParameters, accessModifier);
+		const args = [
+			...(accessModifier ? [accessModifier] : []),
+			...tokenModifiers,
+			this.expect("ReservedFunction"),
+			this.expect("Identifier"),
+			openingAngleBracket,
+			...(genericParameters.length > 0 ? genericParameters : []),
+			closingAngleBracket,
+			openingParen,
+			...parameters,
+			closingParen,
+			type,
+			openingCurlyBracket,
+			body,
+			closingCurlyBracket,
+		].filter((arg) => arg != null) as (Token | Node)[];
+		return createFunctionDeclaration(
+			createIdentifier(name.value, name.value, this.getSpan(name)),
+			type,
+			modifiers,
+			parameters,
+			body,
+			generalModifiers,
+			genericParameters,
+			this.getText(...args),
+			this.getSpan(...args),
+			accessModifier
+		);
 	}
 	private parseTypeDeclaration(generalModifiers: generalModifier[]): UserDefinedTypeDeclaration | TypeAliasDeclaration {
-		this.expect("ReservedType");
+		const typeKeyword = this.expect("ReservedType");
 		const identifier = this.expect("Identifier", "all", "expected an identifier after a type declaration").value;
 		const parameters: GenericParameter[] = [];
+		let openingAngleBracket: Token | null;
+		let closingAngleBracket: Token | null;
 		if (this.peek().type === "Symbol" && this.peek().value === "<") {
-			this.expect("Symbol", "<");
+			openingAngleBracket = this.expect("Symbol", "<");
 			while (!(this.peek().type === "Symbol" && this.peek().value === ">")) {
 				parameters.push(this.parseGenericParameter());
 
@@ -509,37 +599,62 @@ export class Parser {
 				}
 			}
 
-			this.expect("Symbol", ">");
-		}
-		this.expect("Symbol", "=", "expected assignment operator after type declaration");
-		if (this.peek().value === "{") {
-			return this.parseUserDefinedTypeDeclaration(identifier, parameters, generalModifiers);
+			closingAngleBracket = this.expect("Symbol", ">");
 		} else {
-			return this.parseTypeAliasDeclaration(identifier, parameters, generalModifiers);
+			openingAngleBracket = null;
+			closingAngleBracket = null;
+		}
+		const equalsSign = this.expect("Symbol", "=", "expected assignment operator after type declaration");
+		if (this.peek().value === "{") {
+			return this.parseUserDefinedTypeDeclaration(identifier, parameters, generalModifiers, typeKeyword, equalsSign, openingAngleBracket, closingAngleBracket);
+		} else {
+			return this.parseTypeAliasDeclaration(identifier, parameters, generalModifiers, typeKeyword, equalsSign, openingAngleBracket, closingAngleBracket);
 		}
 	}
-	private parseUserDefinedTypeDeclaration(identifier: string, parameters: GenericParameter[], modifiers: generalModifier[]): UserDefinedTypeDeclaration {
-		this.expect("Symbol", "{");
+	private parseUserDefinedTypeDeclaration(
+		identifier: string,
+		parameters: GenericParameter[],
+		modifiers: generalModifier[],
+		typeKeyword: Token,
+		equals: Token,
+		openingAngleBracket: Token | null,
+		closingAngleBracket: Token | null
+	): UserDefinedTypeDeclaration {
+		const openingCurlyBracket = this.expect("Symbol", "{");
 		const properties = this.parseObject("Symbol", "}");
-		this.expect("Symbol", "}");
-		return createUserDefinedTypeDeclaration(identifier, parameters, properties, modifiers);
+		const closingCurlyBracket = this.expect("Symbol", "}");
+		const args = [typeKeyword, identifier, openingAngleBracket, ...parameters, closingAngleBracket, equals, openingCurlyBracket, ...properties, closingCurlyBracket].filter(
+			(arg) => arg != null
+		) as (Token | Node)[];
+		return createUserDefinedTypeDeclaration(identifier, parameters, properties, modifiers, this.getText(...args), this.getSpan(...args));
 	}
-	private parseTypeAliasDeclaration(identifier: string, parameters: GenericParameter[], modifiers: generalModifier[]): TypeAliasDeclaration {
+	private parseTypeAliasDeclaration(
+		identifier: string,
+		parameters: GenericParameter[],
+		modifiers: generalModifier[],
+		typeKeyword: Token,
+		equals: Token,
+		openingAngleBracket: Token | null,
+		closingAngleBracket: Token | null
+	): TypeAliasDeclaration {
 		const value = this.parseType();
-		return createTypeAliasDeclaration(identifier, value, parameters, modifiers);
+		const args = [typeKeyword, identifier, openingAngleBracket, ...parameters, closingAngleBracket, equals, value].filter((arg) => arg != null) as (Token | Node)[];
+		return createTypeAliasDeclaration(identifier, value, parameters, modifiers, this.getText(...args), this.getSpan(...args));
 	}
 	private parseClassDeclaration(generalModifiers: generalModifier[], needsAccessModifier: boolean = false): ClassDeclaration {
-		this.expect("ReservedClass");
+		const classKeyword = this.expect("ReservedClass");
 		const properties: Property[] = [];
 		const methods: FunctionDeclaration[] = [];
 		const identifier = this.expect("Identifier", "all", "A class must have a name");
 		const parameters: GenericParameter[] = [];
+		let openingAngleBracket: Token | null;
+		let closingAngleBracket: Token | null;
 		const hierarchy: HierarchyType = {
 			extends: [],
 			implements: [],
 		};
 		if (this.peek().type === "Symbol" && this.peek().value === "<") {
-			this.expect("Symbol", "<");
+			openingAngleBracket = this.expect("Symbol", "<");
 			while (!(this.peek().type === "Symbol" && this.peek().value === ">")) {
 				parameters.push(this.parseGenericParameter());
 
@@ -550,7 +665,10 @@ export class Parser {
 				}
 			}
 
-			this.expect("Symbol", ">");
+			closingAngleBracket = this.expect("Symbol", ">");
+		} else {
+			openingAngleBracket = null;
+			closingAngleBracket = null;
 		}
 		while (isExtendsOrImplementsToken(this.peek())) {
 			if (isExtendsKeyword(this.peek())) {
@@ -559,9 +677,10 @@ export class Parser {
 				hierarchy.implements.push(this.parseImplements());
 			}
 		}
-		this.expect("Symbol", "{");
+		const openingCurlyBracket = this.expect("Symbol", "{");
 		while (this.peek().value !== "}") {
 			let accessModifier;
+			const tokenModifiers: Token[] = [];
 			const modifiers: Modifier[] = [];
 			if (isAccessModifier(this.peek())) {
 				accessModifier = this.peek();
@@ -571,21 +690,36 @@ export class Parser {
 				throw new LPPSyntaxError("expect an access modifier ");
 			}
 			while (isModifier(this.peek())) {
-				modifiers.push(this.consume().value as Modifier);
+				const modifier = this.consume();
+				tokenModifiers.push(modifier);
+				modifiers.push(modifier.value as Modifier);
 			}
 			if (this.peek().type === "Identifier") {
 				properties.push(this.parseBareProperty(modifiers, accessModifier?.value as AccessModifier));
 			} else if (this.peek().type === "ReservedFunction") {
-				methods.push(this.parseBareFunctionDeclaration([], modifiers, accessModifier?.value as AccessModifier));
+				methods.push(this.parseBareFunctionDeclaration([], modifiers, tokenModifiers, accessModifier?.value as AccessModifier));
 			} else {
 				throw new LPPSyntaxError("expected a property or a method");
 			}
 		}
-		this.expect("Symbol", "}");
-		return createClassDeclaration(generalModifiers, parameters, identifier.value, properties, methods, hierarchy);
+		const closingCurlyBracket = this.expect("Symbol", "}");
+		const args = [
+			classKeyword,
+			identifier,
+			openingAngleBracket,
+			parameters,
+			closingAngleBracket,
+			...hierarchy.extends,
+			...hierarchy.implements,
+			openingCurlyBracket,
+			...properties,
+			...methods,
+			closingCurlyBracket,
+		].filter((arg) => arg != null) as (Token | Node)[];
+		return createClassDeclaration(generalModifiers, parameters, identifier.value, properties, methods, hierarchy, this.getText(...args), this.getSpan(...args));
 	}
 	private parseInterfaceDeclaration(generalModifiers: generalModifier[]): InterfaceDeclaration {
-		this.expect("ReservedInterface");
+		const interfaceToken = this.expect("ReservedInterface");
 		const properties: Property[] = [];
 
 		const identifier = this.expect("Identifier", "all", "expected an identifier after interface keyword");
@@ -633,8 +767,16 @@ export class Parser {
 				throw new LPPSyntaxError("expected a property");
 			}
 		}
-		this.expect("Symbol", "}");
-		return createInterfaceDeclaration(generalModifiers, parameters, identifier.value, properties, hierarchy);
+		const closingCurlyBracket = this.expect("Symbol", "}");
+		return createInterfaceDeclaration(
+			generalModifiers,
+			parameters,
+			identifier.value,
+			properties,
+			hierarchy,
+			this.getText(interfaceToken, closingCurlyBracket),
+			this.getSpan(interfaceToken, closingCurlyBracket)
+		);
 	}
 
 	// ─────────────────────────────────────────────
@@ -642,18 +784,20 @@ export class Parser {
 	// ─────────────────────────────────────────────
 
 	private parseArgument(): Argument {
-		return createArgument(this.parseExpression());
+		const expression = this.parseExpression();
+		return createArgument(expression, expression.text, expression.position);
 	}
 	private parseAssertionExpression(left: Expression): AssertionExpression {
 		this.expect("Symbol", "::");
 		const type = this.parseType();
-		return createAssertionExpression(left, type);
+		return createAssertionExpression(left, type, this.getText(left), this.getSpan(left, type));
 	}
 	private parseMemberAccessExpression(left: Expression): Expression {
 		while (this.peek().value === ".") {
 			this.consume();
-			const right = createIdentifier(this.expect("Identifier").value);
-			left = createMemberAccessExpression(left, right);
+			const identifier = this.expect("Identifier");
+			const right = createIdentifier(identifier.value, identifier.value, this.getSpan(identifier));
+			left = createMemberAccessExpression(left, right, this.getText(left, right), this.getSpan(left, right));
 		}
 		return left;
 	}
@@ -668,13 +812,13 @@ export class Parser {
 				throw new LPPSyntaxError("expected `,` or `)` but got " + this.peek().value);
 			}
 		}
-		this.expect("Symbol", ")");
-		left = createFunctionCallExpression(left, argumentArray);
+		const closingParen = this.expect("Symbol", ")");
+		left = createFunctionCallExpression(left, argumentArray, this.getText(left /* clipfarmmm */), this.getSpan(left, closingParen));
 		return left;
 	}
 	private parseArrayLiteralExpression(): ArrayLiteralExpression {
 		const elements = [];
-		this.expect("Symbol", "[");
+		const openingSquareBracket = this.expect("Symbol", "[");
 		while (this.peek().value !== "]") {
 			elements.push(this.parseExpression());
 			if (this.peek().value === ",") {
@@ -683,15 +827,15 @@ export class Parser {
 				throw new LPPSyntaxError("expected `,` or `]` but got " + this.peek().value);
 			}
 		}
-		this.expect("Symbol", "]");
+		const closingSquareBracket = this.expect("Symbol", "]");
 
-		return createArrayLiteralExpression(elements);
+		return createArrayLiteralExpression(elements, this.getText(openingSquareBracket), this.getSpan(openingSquareBracket, closingSquareBracket));
 	}
 	private parseIndexExpression(left: Expression): IndexExpression {
 		this.expect("Symbol", "[");
 		const index = this.parseExpression();
-		this.expect("Symbol", "]");
-		left = createIndexExpression(left, index);
+		const closingSquareBracket = this.expect("Symbol", "]");
+		left = createIndexExpression(left, index, this.getText(left), this.getSpan(left, closingSquareBracket));
 		return left;
 	}
 	private parseExpression(minPrecedence: number = 0): Expression {
@@ -704,7 +848,7 @@ export class Parser {
 			}
 			this.consume();
 			const right = this.parseExpression(precedence);
-			left = createBinaryExpression(left, operator.value as BinaryOperator, right);
+			left = createBinaryExpression(left, operator.value as BinaryOperator, right, this.getText(left, right), this.getSpan(left, right));
 		}
 		return left;
 	}
@@ -728,24 +872,24 @@ export class Parser {
 		if (isPrefixUnaryOperator(token)) {
 			this.consume();
 			const expression = this.parseExpression(40);
-			return createPrefixUnaryExpression(token.value as PrefixUnaryOperator, expression);
+			return createPrefixUnaryExpression(token.value as PrefixUnaryOperator, expression, this.getText(token, expression), this.getSpan(token, expression));
 		}
 
 		if (token.type === "Number") {
 			this.consume();
-			return createNumberLiteral(token.rawVal as number);
+			return createNumberLiteral(token.rawVal as number, this.getText(token), this.getSpan(token));
 		}
 		if (isBoolean(token)) {
 			this.consume();
-			return createBooleanLiteral(token.value);
+			return createBooleanLiteral(token.value, this.getText(token), this.getSpan(token));
 		}
 		if (token.type === "String") {
 			this.consume();
-			return createStringLiteral(token.value);
+			return createStringLiteral(token.value, this.getText(token), this.getSpan(token));
 		}
 		if (token.type === "Identifier") {
 			this.consume();
-			return createIdentifier(token.value);
+			return createIdentifier(token.value, this.getText(token), this.getSpan(token));
 		}
 		if (token.type === "Symbol" && token.value === "(") {
 			this.consume();
@@ -760,8 +904,9 @@ export class Parser {
 		}
 		if (token.type === "Symbol" && token.value === "{") {
 			this.consume();
-			const expression = createObjectExpression(this.parseObject("Symbol", "}"));
-			this.expect("Symbol", "}");
+			const object = this.parseObject("Symbol", "}");
+			const closingCurlyBracket = this.expect("Symbol", "}");
+			const expression = createObjectExpression(object, this.getText(...object), this.getSpan(token, closingCurlyBracket));
 			return expression;
 		}
 		if (token.type === "ReservedNew") {
@@ -796,12 +941,12 @@ export class Parser {
 			if (this.expect("Symbol").value === "=") {
 				var value = this.parseExpression();
 			} else {
-				throw new LPPSyntaxError("Expected a type");
+				throw new LPPSyntaxError("Expected an initializer");
 			}
 		} else {
 			throw new LPPSyntaxError(); //cant happen since expect throws an error but wtv
 		}
-		return createVariableDeclaration(scope, constant, name, type, value, modifiers);
+		return createVariableDeclaration(scope, constant, name, type, value, modifiers, this.getText(currentToken), this.getSpan(currentToken, value));
 	}
 	private getPrecedence(operator: BinaryOperator): number {
 		switch (operator) {
@@ -831,7 +976,7 @@ export class Parser {
 		}
 	}
 	private parseConstructorExpression(): ConstructorExpression {
-		this.expect("ReservedNew");
+		const newKeyword = this.expect("ReservedNew");
 		const classExpr = this.parsePrimaryExpression();
 		const argumentsArray: Argument[] = [];
 		this.expect("Symbol", "(");
@@ -843,8 +988,8 @@ export class Parser {
 				break;
 			}
 		}
-		this.expect("Symbol", ")");
-		return createConstructorExpression(classExpr, argumentsArray);
+		const closingParen = this.expect("Symbol", ")");
+		return createConstructorExpression(classExpr, argumentsArray, this.getText(newKeyword), this.getSpan(newKeyword, closingParen));
 	}
 	// ─────────────────────────────────────────────
 	// Types
@@ -852,8 +997,9 @@ export class Parser {
 	private parseType(minPrecedence: number = 0): Type {
 		if (this.peek().type === "Symbol" && (this.peek().value === "(" || this.peek().value === "<")) {
 			const genericParameters: GenericParameter[] = [];
+			let openingAngleBracketOrParen: Token;
 			if (this.peek().type === "Symbol" && this.peek().value === "<") {
-				this.expect("Symbol", "<");
+				openingAngleBracketOrParen = this.expect("Symbol", "<");
 				while (!(this.peek().type === "Symbol" && this.peek().value === ">")) {
 					genericParameters.push(this.parseGenericParameter());
 
@@ -865,8 +1011,11 @@ export class Parser {
 				}
 
 				this.expect("Symbol", ">");
+				this.expect("Symbol", "(", "Expected an opening `(` after generic parameters declaration.");
+			} else {
+				openingAngleBracketOrParen = this.expect("Symbol", "(", "Expected an opening `(` after generic parameters declaration.");
 			}
-			this.expect("Symbol", "(", "Expected an opening `(` after generic parameters declaration.");
+
 			const parameters: Parameter[] = [];
 			while (this.peek().value !== ")") {
 				parameters.push(this.parseParameter());
@@ -877,7 +1026,7 @@ export class Parser {
 			this.expect("Symbol", ")", "expected a closing `)`");
 			this.expect("Symbol", "->", "expected a return type annotation");
 			const returnType = this.parseType();
-			return createFunctionType(parameters, genericParameters, returnType);
+			return createFunctionType(parameters, genericParameters, returnType, this.getText(returnType), this.getSpan(openingAngleBracketOrParen, returnType));
 		}
 		let left = this.parsePrimaryType();
 		while (isTypeOperator(this.peek())) {
@@ -894,47 +1043,52 @@ export class Parser {
 	}
 	private parsePrimaryType(): Type {
 		let identifier = this.parsePrimaryExpression();
+		let lastToken: Token | Node;
 		if (
-			identifier.type === "ArrayLiteralExpression" ||
-			identifier.type === "NumberLiteral" ||
-			identifier.type === "StringLiteral" ||
-			identifier.type === "BooleanLiteral" ||
-			identifier.type === "ObjectExpression"
+			identifier.type === NodeKind.ArrayLiteralExpression ||
+			identifier.type === NodeKind.NumberLiteral ||
+			identifier.type === NodeKind.StringLiteral ||
+			identifier.type === NodeKind.BooleanLiteral ||
+			identifier.type === NodeKind.ObjectExpression
 		)
 			return identifier;
-		if (identifier.type !== "Identifier") throw new LPPSyntaxError("Cannot assign expression of type `" + identifier.type + "` to a literal or an identifier.");
+		if (identifier.type !== NodeKind.Identifier) throw new LPPSyntaxError("Expected an identifier but got " + identifier.type + ".");
 		const genericTypes: Type[] = [];
-		if (identifier.type === "Identifier") {
-			if (this.peek().type === "Symbol" && this.peek().value === "<") {
-				this.expect("Symbol", "<");
-				while (!(this.peek().type === "Symbol" && this.peek().value === ">")) {
-					genericTypes.push(this.parseGeneric());
+		if (this.peek().type === "Symbol" && this.peek().value === "<") {
+			this.expect("Symbol", "<");
+			while (!(this.peek().type === "Symbol" && this.peek().value === ">")) {
+				genericTypes.push(this.parseGeneric());
 
-					if (this.peek().type === "Symbol" && this.peek().value === ",") {
-						this.expect("Symbol", ",");
-					} else {
-						break;
-					}
+				if (this.peek().type === "Symbol" && this.peek().value === ",") {
+					this.expect("Symbol", ",");
+				} else {
+					break;
 				}
-				this.expect("Symbol", ">", "expected closing `>`");
 			}
-		}
+			lastToken = this.expect("Symbol", ">", "expected closing `>`");
+		} else lastToken = identifier;
 
 		let optional = false;
 		if (this.peek().type === "Symbol" && this.peek().value === "?") {
-			this.consume();
+			lastToken = this.consume();
 			optional = true;
 		}
 
-		return createTypeReference(createIdentifier(identifier.value), genericTypes, optional);
+		return createTypeReference(
+			createIdentifier(identifier.value, identifier.value, this.getSpan(identifier)),
+			genericTypes,
+			optional,
+			this.getText(identifier),
+			this.getSpan(identifier, lastToken)
+		);
 	}
 	private createTypeOperator(left: Type, operator: typeOperator, right: Type): Type {
 		switch (operator) {
 			case "&":
-				return createIntersectionType(left, right);
+				return createIntersectionType(left, right, this.getText(left), this.getSpan(left, right));
 
 			case "|":
-				return createUnionType(left, right);
+				return createUnionType(left, right, this.getText(left), this.getSpan(left, right));
 			default:
 				throw new LPPSyntaxError("expected a valid type operator");
 		}
@@ -945,11 +1099,11 @@ export class Parser {
 		return type;
 	}
 	private parseGenericParameter(): GenericParameter {
-		const identifier = this.expect("Identifier").value;
+		const identifier = this.expect("Identifier");
 		this.expect("Symbol", ":", "expect type annotation");
 		const type = this.parseType();
 
-		return createGenericParameter(identifier, type);
+		return createGenericParameter(identifier.value, type, this.getText(identifier), this.getSpan(identifier, type));
 	}
 	private getTypePrecedece(operator: typeOperator) {
 		switch (operator) {
@@ -994,5 +1148,24 @@ export class Parser {
 		} else {
 			throw new LPPSyntaxError(error || "Expected value  `" + desired + "` but got `" + this.peek().value + "`.");
 		}
+	}
+
+	private getText(...tokensOrNodes: (Token | Node)[]): string {
+		let text = "";
+		for (let index = 0; index < tokensOrNodes.length; index++) {
+			const tokenOrNode = tokensOrNodes[index]!;
+			if (isToken(tokenOrNode)) {
+				text += tokenOrNode.value;
+			} else {
+				text += tokenOrNode.text;
+			}
+		}
+		return text;
+	}
+	private getSpan(...items: (Token | Node)[]): Span {
+		return {
+			start: items[0]!.position.start,
+			end: items[items.length - 1]!.position.end,
+		};
 	}
 }

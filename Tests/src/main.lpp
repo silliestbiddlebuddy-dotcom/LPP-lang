@@ -1,4 +1,9 @@
-import sin from <math>;
 const local foo: string = "yo wassup";
-
+class myClass {
+    private num: int32
+    public static function myClass(num: int32): myClass {
+        this.num = num;
+        return this
+    }
+}
 println(foo);
