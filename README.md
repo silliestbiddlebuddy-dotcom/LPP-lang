@@ -2,7 +2,7 @@
 <p align="center">
   <img src="./Assets/logo.svg" alt="L++ Logo" width="350">
 </p>
-L++ is a strongly and statically typed programming language
+L++ is a strongly and statically typed, Garbage-Collected programming language
 compiled using LLVM, with its compiler written entirely in TypeScript.
 
 It's inspired by Luau and C++ hence the name L++
@@ -269,7 +269,7 @@ Q: Is L++ open source?
 >L++'s source code is publicly available for viewing. However, its license does not permit modification or redistribution **for now**
 
 Q: Is L++ suitable for beginners?
-> I'd say yes, L++ syntax is readable, it teaches you types, memory management, how to use CLIs... 
+> I'd say yes, L++ syntax is readable, it teaches you classes, interfaces, types, how to use CLIs... 
 
 Q: What platforms does L++ support?
 > Any platform supported by the required LLVM/Clang toolchain, provided the L++ runtime supports it.
@@ -284,7 +284,7 @@ Q: Why does L++ require explicit type annotations?
 > It's easier for me to do type-checking and predictability for users
 
 Q: Why doesn't L++ have pointers?
-> So beginners don't have to learn references or dereferences directly, tho manual memory management will make it easier for them to understand them
+> So beginners don't have to learn references or dereferences directly
 
 Q: How can I report a bug?
 > Open an issue and prefix it with "Bug: " in the title
