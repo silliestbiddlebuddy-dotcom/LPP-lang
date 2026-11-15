@@ -1,5 +1,5 @@
-import type { AssignmentOperator, BinaryOperator, PostfixUnaryOperator, PrefixUnaryOperator } from "../../Frontend/Parser/Parser.types.ts";
-import type { Type } from "../../Frontend/Semantic/Environment/Builtins.ts";
+import type { AssignmentOperator, BinaryOperator, PostfixUnaryOperator, PrefixUnaryOperator } from "../../../Frontend/Parser/Parser.types.ts";
+import type { Type } from "../../../Frontend/Semantic/Environment/Builtins.ts";
 export function typeToLLVM(type: Type): string {
 	switch (type.kind) {
 		case "float":
@@ -58,10 +58,11 @@ export function typeToLLVM(type: Type): string {
 		case "emptiness":
 			return "void";
 
+		case "typeAlias":
+			return typeToLLVM(type.type);
 		case "union":
 		case "intersection":
 		case "typeParameter":
-		case "typeAlias":
 			throw new Error(`Type "${type.kind}" must be resolved before LLVM lowering.`);
 
 		case "void":
